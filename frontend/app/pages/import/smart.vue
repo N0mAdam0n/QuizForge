@@ -126,23 +126,23 @@ const globalSettings = ref({
     source: '' as string,
 })
 
-// 标签精准解析不支持图片识别；切换到该方法时把来源切回文件/文本。
+// 本地解析读取文本中的图片引用，不处理单独上传的图片。
 watch(parseMethod, (method) => {
     if (method === 'structured' && pastedImage.value) {
         activeTab.value = 'file'
     }
 })
 
-// 与后端 structured_parser 的宽松匹配规则保持一致（全角/半角括号 + 别名）。
-const STRUCTURED_TAG_PATTERN = /[【\[]\s*(题目|题干|question|title)\s*[】\]]/i
+const LOCAL_TAG_PATTERN = /[【\[]\s*(题目|题干|question|title)\s*[】\]]/i
+const LOCAL_NUMBERED_QUESTION_PATTERN = /^\s*(?:\*\*)?\(?\d+(?:\.\d+)*\)?[.、．)]\s*\S/m
 
-// 粘贴文本或 .md 文件里若完全没有 【题目】 类标签，提前非阻塞提示，避免解析出空列表却不知道原因。
-const structuredTagWarning = computed(() => {
+// 粘贴文本或 .md 文件里若没有标签或题号边界，提前提示本地解析可能无法识别。
+const localParsingWarning = computed(() => {
     if (parseMethod.value !== 'structured') return null
     const text = activeTab.value === 'text' ? markdownContent.value : (fileTextPreview.value ?? '')
     if (!text.trim()) return null
-    if (STRUCTURED_TAG_PATTERN.test(text)) return null
-    return '未检测到【题目】标签，标签精准解析可能无法识别到任何题目。'
+    if (LOCAL_TAG_PATTERN.test(text) || LOCAL_NUMBERED_QUESTION_PATTERN.test(text)) return null
+    return '未检测到题目标记或题号开头的题目，本地解析可能无法识别；可尝试 AI 识别。'
 })
 
 // --- Data Fetching ---
@@ -246,6 +246,13 @@ const handleAutoUpload = () => {
         toast.error('请先选择所属学科')
         return
     }
+    if (
+        parseMethod.value === 'structured'
+        && (pastedImage.value || file.value?.type.startsWith('image/'))
+    ) {
+        error.value = '本地多策略识别无法直接识别独立图片，请切换到 AI 识别。'
+        return
+    }
     if (parseMethod.value === 'ai' && embeddingConfigured.value && !chromaReachable.value) {
         if (!confirm('知识点向量库暂时不可达，是否跳过知识点自动匹配继续导入？')) return
     }
@@ -269,9 +276,9 @@ const toDrafts = (items: ExtractedQuestionItem[] | undefined | null): ImportDraf
 /** 接收一次抽取结果：题目、整卷结构、文件指纹与重复提示。 */
 const acceptExtraction = (data: any) => {
     const drafts = toDrafts(data.questions)
-    // 标签解析器缺 【题目】 标签时会静默返回空列表；留在上传页给出可操作的提示，而不是展示一个空的审核页。
+    // 本地解析未识别到题目时留在上传页，提供可操作的反馈而不是展示空审核页。
     if (parseMethod.value === 'structured' && drafts.length === 0) {
-        error.value = '未解析到任何题目，请检查文档是否使用了【题目】等标签。'
+        error.value = '未识别到题目，请检查是否使用【题目】标签或以题号开头（如“1. 题干”）；也可切换 AI 识别。'
         showFormatGuide.value = true
         return
     }
@@ -738,15 +745,15 @@ const reset = () => {
                             >
                                 <div class="mt-0.5"><CheckCircle2 v-if="parseMethod === 'structured'" class="h-5 w-5 text-primary" /><div v-else class="h-5 w-5 rounded-full border opacity-50"/></div>
                                 <div class="flex-1">
-                                    <div class="text-base font-medium">📝 严格模板解析</div>
-                                    <div class="text-sm text-muted-foreground mt-1">适用于已按【题目】【答案】等标签排版好的题库。</div>
+                                    <div class="text-base font-medium">📝 本地多策略识别</div>
+                                    <div class="text-sm text-muted-foreground mt-1">支持标签模板和常见题号、选项、答案排版；不调用 AI。</div>
                                     <Button
                                         variant="link"
                                         size="sm"
                                         class="h-auto p-0 mt-1 text-xs"
                                         @click.stop="showFormatGuide = true"
                                     >
-                                        <BookOpen class="h-3 w-3 mr-1" />查看标签格式与示例
+                                        <BookOpen class="h-3 w-3 mr-1" />查看支持格式与示例
                                     </Button>
                                 </div>
                             </div>
@@ -811,10 +818,10 @@ const reset = () => {
 
                     <!-- Final Action -->
                     <div class="pt-4 mt-4 border-t">
-                        <Alert v-if="structuredTagWarning" class="mb-3">
+                        <Alert v-if="localParsingWarning" class="mb-3">
                             <AlertCircle class="h-4 w-4" />
                             <AlertDescription>
-                                {{ structuredTagWarning }}
+                                {{ localParsingWarning }}
                                 <button type="button" class="underline font-medium ml-1" @click="showFormatGuide = true">查看格式说明</button>
                             </AlertDescription>
                         </Alert>
@@ -827,7 +834,7 @@ const reset = () => {
                             <Loader2 v-if="isUploading" class="mr-2 h-6 w-6 animate-spin" />
                             <Sparkles v-else-if="parseMethod === 'ai'" class="mr-2 h-6 w-6" />
                             <FileCode v-else class="mr-2 h-6 w-6" />
-                            {{ isUploading ? '正在拼命识别中...' : (parseMethod === 'ai' ? '开始智能识别' : '开始模板解析') }}
+                            {{ isUploading ? '正在拼命识别中...' : (parseMethod === 'ai' ? '开始智能识别' : '开始本地识别') }}
                         </Button>
                         <p v-if="(!file && !pastedImage && !markdownContent.trim())" class="text-center text-sm text-destructive mt-3">
                             请在上方提供文件或纯文本内容

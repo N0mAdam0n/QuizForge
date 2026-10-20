@@ -2,7 +2,7 @@ import json
 
 from app.services.importing.contracts import OUTLINE_HEADING
 from app.services.question_legacy_adapter import adapt_legacy_question
-from app.services.structured_parser import parse_structured
+from app.services.structured_parser import parse_local, parse_structured
 
 
 def test_single_choice_full_block():
@@ -257,3 +257,76 @@ def test_answer_section_tag_trailing_other_heading_text_is_recognized():
 
 def test_empty_input_returns_empty_list():
     assert parse_structured("").questions == []
+
+
+def test_local_parser_recognizes_numbered_stems_with_inline_images():
+    text = (
+        "网络设备题库\n"
+        "1.1. 根据图示网络判断路由关系 ![拓扑图](/static/media/task/image1.png)\n"
+        "A. 路由器 R1 是 DR\n"
+        "B. 路由器 R2 是 DR\n"
+        "答案：A\n"
+        "解析：依据图中的接口和邻接关系判断。 ![解析图](/static/media/task/image2.png)\n"
+        "-------------------------------------------\n"
+        "2. 根据配置片段选择正确说法\n"
+        "A. 选项一\n"
+        "B. 选项二\n"
+        "C. 选项三\n"
+        "D. 选项四\n"
+        "答案: C\n"
+    )
+
+    result = parse_local(text)
+
+    assert len(result.questions) == 2
+    first, second = result.questions
+    assert first["source_number"] == "1.1"
+    assert "![拓扑图](/static/media/task/image1.png)" in first["content"]
+    assert "![解析图](/static/media/task/image2.png)" in first["analysis"]
+    assert first["options"] == ["A. 路由器 R1 是 DR", "B. 路由器 R2 是 DR"]
+    assert first["answer"] == "A"
+    assert first["q_type"] == "single_choice"
+    assert second["source_number"] == "2"
+    assert second["answer"] == "C"
+    refs = [item for item in result.paper["outline"] if item["kind"] == "question_ref"]
+    assert [item["temp_id"] for item in refs] == [first["id"], second["id"]]
+
+
+def test_local_parser_uses_section_type_and_supports_multiple_answers():
+    text = (
+        "二、多项选择题\n"
+        "1. 选择所有正确项\n"
+        "A. 第一项\n"
+        "B. 第二项\n"
+        "C. 第三项\n"
+        "答案：A、C\n"
+    )
+
+    question = parse_local(text).questions[0]
+
+    assert question["q_type"] == "multiple_choice"
+    assert question["answer"] == "A、C"
+    assert question["warnings"] == []
+
+
+def test_local_parser_keeps_post_answer_notes_out_of_the_answer():
+    text = (
+        "1. 设备未收到告警，可能的原因是？\n"
+        "A. 版本不一致\n"
+        "B. 团体名不一致\n"
+        "答案：A\n"
+        "参见官方文档。\n"
+    )
+
+    question = parse_local(text).questions[0]
+
+    assert question["answer"] == "A"
+    assert question["analysis"] == "参见官方文档。"
+    assert question["warnings"] == []
+
+
+def test_local_parser_keeps_tagged_format_compatibility():
+    result = parse_local("【题目】1 + 1 = ?\n【答案】2")
+
+    assert result.questions[0]["content"] == "1 + 1 = ?"
+    assert result.questions[0]["answer"] == "2"

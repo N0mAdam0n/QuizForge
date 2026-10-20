@@ -100,6 +100,19 @@ _SECTION_HEADING_RE = re.compile(
     r'(?:[一二三四五六七八九十百]+|\d+)\s*[、\.．]\s*'
     r'(?:单选|多选|选择|填空|判断|解答|简答|综合).*题',
 )
+_NUMBERED_QUESTION_RE = re.compile(
+    r'^\s*(?:\*\*)?\(?(\d+(?:\.\d+)*)\)?[.、．)]\s*(.*?)\s*(?:\*\*)?\s*$'
+)
+_ANSWER_LINE_RE = re.compile(
+    r'^\s*(?:参考答案|正确答案|答案)\s*(?:是|为)?\s*[:：]?\s*(.*?)\s*$',
+    re.IGNORECASE,
+)
+_ANALYSIS_LINE_RE = re.compile(
+    r'^\s*(?:解析|详解|解答|分析)\s*[:：]?\s*(.*?)\s*$',
+    re.IGNORECASE,
+)
+_OPTION_LINE_RE = re.compile(r'^\s*([A-Z])\s*[.、．)]\s*(.*?)\s*$', re.IGNORECASE)
+_SEPARATOR_LINE_RE = re.compile(r'^\s*[-_—=]{3,}\s*$')
 
 
 def _strip_blockquote_prefix(line: str) -> str:
@@ -568,6 +581,178 @@ def parse_structured(text: str) -> ExtractionResult:
         questions=questions,
         paper={"suggested_title": suggested_title, "outline": outline},
     )
+
+
+def _section_question_type(line: str) -> Optional[str]:
+    normalized = _heading_text(line)
+    if "多项选择" in normalized:
+        return "multiple_choice"
+    if "单项选择" in normalized:
+        return "single_choice"
+    for label, q_type in _Q_TYPE_MAP.items():
+        if label in normalized and not label.isascii():
+            return q_type
+    return None
+
+
+def parse_numbered(text: str) -> ExtractionResult:
+    """Parse common numbered question-bank documents without explicit field tags."""
+    lines = [_strip_blockquote_prefix(line).strip() for line in (text or "").splitlines()]
+    questions: List[dict] = []
+    outline: List[PaperOutlineItem] = []
+    pending_text: List[str] = []
+    current: Optional[dict] = None
+    current_field: Optional[str] = None
+    current_option: Optional[int] = None
+    section_q_type: Optional[str] = None
+    answer_section_lines: Optional[List[str]] = None
+
+    def flush_text() -> None:
+        markdown = "\n".join(pending_text).strip()
+        pending_text.clear()
+        if markdown:
+            outline.append({"kind": OUTLINE_RICH_TEXT, "markdown": markdown})
+
+    def flush_question() -> None:
+        nonlocal current, current_field, current_option
+        if current is None:
+            return
+        _finalize_question(current)
+        current.pop("_q_type_explicit", None)
+        questions.append(current)
+        outline.append(
+            {
+                "kind": OUTLINE_QUESTION_REF,
+                "temp_id": current["id"],
+                "number": current.get("source_number"),
+            }
+        )
+        current = None
+        current_field = None
+        current_option = None
+
+    for index, line in enumerate(lines):
+        if not line or _SEPARATOR_LINE_RE.fullmatch(line):
+            continue
+
+        section = _match_section_tag(line)
+        if section and section[0] == "answer_section":
+            flush_question()
+            flush_text()
+            prefix_heading = section[1]
+            if prefix_heading:
+                outline.append({"kind": OUTLINE_HEADING, "text": prefix_heading, "level": 2})
+            answer_section_lines = lines[index + 1:]
+            break
+
+        if _is_section_heading(line):
+            flush_question()
+            flush_text()
+            heading = _heading_text(line)
+            if heading:
+                outline.append({"kind": OUTLINE_HEADING, "text": heading, "level": 2})
+            section_q_type = _section_question_type(line)
+            continue
+
+        numbered = _NUMBERED_QUESTION_RE.fullmatch(line)
+        if numbered:
+            flush_question()
+            flush_text()
+            number, content = numbered.groups()
+            current = {
+                "id": str(uuid.uuid4()),
+                "source_number": _normalize_number(number),
+                "content": content.strip(),
+                "q_type": None,
+                "options": [],
+                "answer": "",
+                "thinking": "",
+                "analysis": "",
+                "summary": "",
+                "difficulty": 1,
+                "warnings": [],
+                "_q_type_explicit": section_q_type,
+            }
+            current_field = "content"
+            continue
+
+        if current is None:
+            pending_text.append(line)
+            continue
+
+        normalized_line = re.sub(r"^\*\*(.*?)\*\*$", r"\1", line)
+        answer_match = _ANSWER_LINE_RE.fullmatch(normalized_line)
+        if answer_match:
+            current_field = "answer"
+            current_option = None
+            current["answer"] = answer_match.group(1).strip()
+            continue
+
+        analysis_match = _ANALYSIS_LINE_RE.fullmatch(normalized_line)
+        if analysis_match:
+            current_field = "analysis"
+            current_option = None
+            current["analysis"] = analysis_match.group(1).strip()
+            continue
+
+        option_match = _OPTION_LINE_RE.fullmatch(normalized_line)
+        if option_match:
+            label, option_content = option_match.groups()
+            inline_options = _split_option_block(normalized_line)
+            if inline_options:
+                current["options"].extend(inline_options)
+                current_option = len(current["options"]) - 1
+            else:
+                current["options"].append(f"{label.upper()}. {option_content}".rstrip())
+                current_option = len(current["options"]) - 1
+            current_field = "options"
+            continue
+
+        if current_field == "options" and current_option is not None:
+            current["options"][current_option] += f"\n{line}"
+        elif current_field == "answer":
+            if current["options"]:
+                current["analysis"] = f"{current['analysis']}\n{line}".strip()
+                current_field = "analysis"
+            else:
+                current["answer"] = f"{current['answer']}\n{line}".strip()
+        elif current_field == "analysis":
+            current["analysis"] = f"{current['analysis']}\n{line}".strip()
+        else:
+            current["content"] = f"{current['content']}\n{line}".strip()
+
+    flush_question()
+    flush_text()
+
+    if answer_section_lines is not None:
+        answers_by_number, analyses_by_number = _parse_answer_section(answer_section_lines)
+        for question in questions:
+            number = question.get("source_number")
+            if not number:
+                continue
+            if not question["answer"] and number in answers_by_number:
+                question["answer"] = answers_by_number[number]
+            if not question["analysis"] and number in analyses_by_number:
+                question["analysis"] = analyses_by_number[number]
+            _finalize_question(question)
+        outline.extend(_split_answer_section_outline(answer_section_lines))
+
+    suggested_title = _take_suggested_title(outline)
+    return ExtractionResult(
+        questions=questions,
+        paper={"suggested_title": suggested_title, "outline": outline},
+    )
+
+
+def parse_local(text: str) -> ExtractionResult:
+    """Choose the deterministic local parser based on the document's structure."""
+    has_question_tags = any(
+        (tag := _match_tag(_strip_blockquote_prefix(line))) is not None and tag[0] == "content"
+        for line in (text or "").splitlines()
+    )
+    if has_question_tags:
+        return parse_structured(text)
+    return parse_numbered(text)
 
 
 def _take_suggested_title(outline: List[PaperOutlineItem]) -> Optional[str]:

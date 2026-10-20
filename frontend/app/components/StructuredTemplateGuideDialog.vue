@@ -37,6 +37,17 @@ const tagRows = [
 
 const examples = [
     {
+        key: 'numbered',
+        label: '常见题号格式',
+        text: `1. 根据图示网络，以下说法正确的是？ ![网络拓扑](/static/media/task-id/image1.png)
+A. 选项一
+B. 选项二
+C. 选项三
+D. 选项四
+答案：A
+解析：图中的网络结构决定了正确选项。`,
+    },
+    {
         key: 'single',
         label: '单选题',
         text: `【题目】下列关于集合的说法正确的是
@@ -82,12 +93,16 @@ const copyExample = async (text: string) => {
     <Dialog :open="open" @update:open="emit('update:open', $event)">
         <DialogContent class="w-[95vw] sm:max-w-[680px] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-                <DialogTitle>标签精准解析：格式说明</DialogTitle>
+                <DialogTitle>本地多策略识别：格式说明</DialogTitle>
                 <DialogDescription>
-                    用 <Badge variant="outline">【题目】</Badge> 分隔每一道题，其余标签均可省略。全角
-                    【】与半角 [] 均可识别。
+                    可识别显式标签模板，也支持以题号开头、后接选项和答案/解析的常见题库排版。
+                    文本中的图片引用会保留在题干或解析中；全角【】与半角 [] 均可识别。
                 </DialogDescription>
             </DialogHeader>
+
+            <p class="text-sm text-muted-foreground">
+                不同文档的排版仍可能有差异，请在识别后检查题目边界、图片位置和答案；结构复杂或扫描件可切换 AI 识别。
+            </p>
 
             <Table>
                 <TableHeader>
@@ -109,7 +124,7 @@ const copyExample = async (text: string) => {
             </Table>
 
             <Tabs default-value="single" class="mt-2">
-                <TabsList class="grid w-full grid-cols-4">
+                <TabsList class="grid w-full grid-cols-5">
                     <TabsTrigger v-for="ex in examples" :key="ex.key" :value="ex.key">{{ ex.label }}</TabsTrigger>
                 </TabsList>
                 <TabsContent v-for="ex in examples" :key="ex.key" :value="ex.key" class="mt-3">

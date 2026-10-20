@@ -5,7 +5,7 @@ from app.models.subject import Subject
 from app.models.tag import Tag
 from app.models.tag_category import TagCategory
 from app.schemas.ai import AIQuestion
-from app.services.importing.extract import AIExtractor, _assign_temp_ids
+from app.services.importing.extract import AIExtractor, TemplateExtractor, _assign_temp_ids
 from app.services.importing.prompt import PromptBuilder
 
 
@@ -24,6 +24,20 @@ def test_assign_temp_ids_fills_and_links_children():
     # 已有 id 的题保持不变。
     assert out[1]["id"] == "keep-me"
     assert "parent_id" not in out[1]
+
+
+async def test_template_extractor_accepts_numbered_questions_without_tags():
+    result = await TemplateExtractor().extract(
+        "1. 题干 ![网络图](/static/media/sample/topology.png)\n"
+        "A. 选项一\n"
+        "B. 选项二\n"
+        "答案：A",
+        db=None,
+    )
+
+    assert len(result.questions) == 1
+    assert "![网络图](/static/media/sample/topology.png)" in result.questions[0]["content"]
+    assert result.questions[0]["answer"] == "A"
 
 
 async def test_prompt_builder_injects_tag_context(db_session):

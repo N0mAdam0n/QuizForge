@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.ai import AIQuestion
 from app.services.ai_provider import get_ai_provider
-from app.services.structured_parser import parse_structured
+from app.services.structured_parser import parse_local
 
 from .enrich import KnowledgePointEnricher
 from .contracts import ExtractionResult
@@ -128,7 +128,7 @@ class AIExtractor:
 
 
 class TemplateExtractor:
-    """确定性、无 AI 的标签模板解析(【题目】【选项】【答案】…)。忽略图像/学科。"""
+    """确定性本地解析:支持显式标签模板与常见题号、选项、答案格式。"""
 
     async def extract(
         self,
@@ -140,5 +140,4 @@ class TemplateExtractor:
         mode: str = "extract",
         subject_id: Optional[int] = None,
     ) -> ExtractionResult:
-        return parse_structured(content)
-
+        return parse_local(content)
