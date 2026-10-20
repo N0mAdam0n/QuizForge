@@ -18,6 +18,11 @@ build-frontend:
 package: build-frontend
     uv run --with pyinstaller pyinstaller run.spec --clean
 
+# Build a ZIP edition that stores all writable data beside the executable.
+package-portable: build-frontend
+    uv run --with pyinstaller pyinstaller run-portable.spec --clean
+    uv run python scripts/package_portable.py
+
 # Run the unified launcher locally (dev): migrations + worker + API + open UI.
 run-desktop:
     uv run python run.py

@@ -25,15 +25,14 @@
 
 ## 🚀 快速体验 (Quick Start)
 
-推荐直接下载**桌面版**：一个 Windows 托盘应用，内置后端、前端与 SQLite 数据库，**无需安装数据库或 Docker**，双击安装即可使用。
+推荐直接下载**Windows 桌面版**：一个托盘应用，内置后端、前端与 SQLite 数据库，**无需安装数据库或 Docker**。提供安装程序和 ZIP 便携版两种形式。
 
-1. 打开 [GitHub Releases](https://github.com/gygy-open/question-bank/releases)，下载最新的 `QuestionBank-Setup-x.y.z.exe`。
-2. 双击运行安装程序，按向导完成安装。
-3. 安装后应用以**托盘图标**常驻任务栏右下角，右键 → 「打开题库」进入初始化向导（创建管理员账号）即可使用。
+1. 打开 [GitHub Releases](https://github.com/gygy-open/question-bank/releases)，下载 `QuestionBank-Setup-x.y.z.exe` 安装，或下载 `QuestionBank-Portable-x.y.z.zip` 解压即用。
+2. 启动后应用以**托盘图标**常驻任务栏右下角，右键 → 「打开题库」进入初始化向导（创建管理员账号）即可使用。
 
-数据统一存放在 `%APPDATA%\QuestionBank`，关闭应用后直接复制该目录即可备份。
+安装版数据存放在 `%APPDATA%\QuestionBank`；便携版数据存放在解压目录的 `data` 文件夹。
 
-详见文档：[安装与首次启动](https://gygy-open.github.io/question-bank/desktop/install) · [个人使用](https://gygy-open.github.io/question-bank/desktop/personal)
+详见文档：[安装与首次启动及 Lite 便携版](https://gygy-open.github.io/question-bank/desktop/install) · [个人使用](https://gygy-open.github.io/question-bank/desktop/personal)
 
 ## 🌐 其他部署方式
 

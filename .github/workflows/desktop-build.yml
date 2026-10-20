@@ -87,6 +87,12 @@ jobs:
         working-directory: backend
         run: uv run --with pyinstaller pyinstaller run.spec --clean
 
+      - name: Package portable ZIP
+        working-directory: backend
+        run: |
+          uv run --with pyinstaller pyinstaller run-portable.spec --clean
+          uv run python scripts/package_portable.py
+
       # --- Stage payload + build the GUI installer (Inno Setup) ---
       - name: Build installer
         id: pkg
@@ -111,12 +117,17 @@ jobs:
 
           $setup = "$out/QuestionBank-Setup-$ver.exe"
           if (-not (Test-Path $setup)) { throw "Installer not produced: $setup" }
+          $portable = "backend/dist/QuestionBank-Portable-$ver.zip"
+          if (-not (Test-Path $portable)) { throw "Portable ZIP not produced: $portable" }
           echo "setup=$setup" >> $env:GITHUB_OUTPUT
+          echo "portable=$portable" >> $env:GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
-          name: question-bank-windows-installer
-          path: ${{ steps.pkg.outputs.setup }}
+          name: question-bank-windows-packages
+          path: |
+            ${{ steps.pkg.outputs.setup }}
+            ${{ steps.pkg.outputs.portable }}
           if-no-files-found: error
 
   release:

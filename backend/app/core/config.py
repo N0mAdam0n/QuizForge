@@ -47,6 +47,9 @@ def _default_data_dir() -> Path:
     - Development / server: the ``backend/`` project directory.
     """
     if getattr(sys, "frozen", False):
+        executable_dir = Path(sys.executable).resolve().parent
+        if (executable_dir / "portable.mode").is_file():
+            return executable_dir / "data"
         if sys.platform == "win32":
             base = Path(os.getenv("APPDATA", str(Path.home())))
         elif sys.platform == "darwin":
