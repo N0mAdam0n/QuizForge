@@ -1,3 +1,6 @@
+# Use the shell available on Windows without requiring Git Bash or WSL.
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
+
 migrate:
     alembic upgrade head
 
@@ -11,7 +14,8 @@ test:
 
 # Build the frontend SPA so it can be bundled into the desktop executable.
 build-frontend:
-    cd ../frontend && pnpm install && pnpm generate
+    pnpm --dir ../frontend install
+    pnpm --dir ../frontend generate
 
 # Produce the single-file desktop executable (runs migrations + API + worker
 # + serves the bundled SPA). Requires `build-frontend` to have run first.
