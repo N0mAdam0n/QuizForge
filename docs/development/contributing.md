@@ -1,6 +1,6 @@
 # 贡献指南
 
-欢迎贡献！完整说明见仓库根目录的 [`CONTRIBUTING.md`](https://github.com/gygy-open/question-bank/blob/main/CONTRIBUTING.md)，此处为摘要。
+欢迎贡献！完整说明见仓库根目录的 [`CONTRIBUTING.md`](https://github.com/N0mAdam0n/question-bank-Nom/blob/main/CONTRIBUTING.md)，此处为摘要。
 
 ## 授权协议
 

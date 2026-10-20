@@ -27,3 +27,9 @@ from .composition import (
     CompositionVersionSummary, CompositionVersionRead, CompositionEventRead,
     CompositionEventPage,
 )
+from .practice import (
+    PracticeAnswerResult,
+    PracticeAnswerSubmit,
+    PracticeQuestion,
+    PracticeQuestionSet,
+)

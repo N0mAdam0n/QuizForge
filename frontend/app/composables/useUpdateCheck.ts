@@ -103,7 +103,7 @@ async function fetchLatestRelease(repo: string, includePrerelease: boolean): Pro
 }
 
 export function useUpdateCheck() {
-  const state = useLocalStorage<UpdateState>('update-check', {
+  const state = useLocalStorage<UpdateState>('question-bank-nom-update-check', {
     current: '',
     latest: '',
     hasUpdate: false,

@@ -15,6 +15,7 @@ from .chat import ChatSession, ChatMessage
 from .agent import AgentRun, AgentStep
 from .prompt import PromptTemplate
 from .paper import Paper, PaperQuestion
+from .practice_attempt import PracticeAttempt
 from .composition import (
     ScopeType,
     CompositionStatus,

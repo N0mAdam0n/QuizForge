@@ -6,14 +6,14 @@ export default defineConfig({
   title: 'QuestionBank',
   description: 'AI 原生的题库系统 · 使用文档',
 
-  // Project Pages: https://gygy-open.github.io/question-bank/
-  base: '/question-bank/',
+  // Project Pages: https://n0madamon.github.io/question-bank-Nom/
+  base: '/question-bank-Nom/',
 
   lastUpdated: true,
   cleanUrls: true,
   metaChunk: true,
 
-  head: [['link', { rel: 'icon', href: '/question-bank/logo.svg' }]],
+  head: [['link', { rel: 'icon', href: '/question-bank-Nom/logo.svg' }]],
 
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
@@ -147,7 +147,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/gygy-open/question-bank' }
+      { icon: 'github', link: 'https://github.com/N0mAdam0n/question-bank-Nom' }
     ],
 
     search: {
@@ -156,7 +156,7 @@ export default defineConfig({
 
     editLink: {
       pattern:
-        'https://github.com/gygy-open/question-bank/edit/main/docs/:path',
+        'https://github.com/N0mAdam0n/question-bank-Nom/edit/main/docs/:path',
       text: '在 GitHub 上编辑此页'
     },
 

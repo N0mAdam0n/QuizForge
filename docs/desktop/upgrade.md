@@ -2,7 +2,7 @@
 
 ## 升级到新版本
 
-1. 从 [GitHub Releases](https://github.com/gygy-open/question-bank/releases) 下载最新安装包。
+1. 从 [GitHub Releases](https://github.com/N0mAdam0n/question-bank-Nom/releases) 下载最新安装包。
 2. 右键托盘图标 → 「退出」，关闭当前应用。
 3. 运行新安装包，**覆盖安装**即可。
 

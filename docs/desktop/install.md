@@ -9,7 +9,7 @@
 
 ## 下载与安装
 
-1. 打开 [GitHub Releases](https://github.com/gygy-open/question-bank/releases)，下载最新的 `QuestionBank-Setup-x.y.z.exe`。
+1. 打开 [GitHub Releases](https://github.com/N0mAdam0n/question-bank-Nom/releases)，下载最新的 `QuestionBank-Setup-x.y.z.exe`。
 
 ![](../public/install/github-release-download.png)
 
@@ -20,7 +20,7 @@
 
 ## Lite 便携版
 
-如果不想安装，可从 [GitHub Releases](https://github.com/gygy-open/question-bank/releases) 下载 `QuestionBank-Portable-x.y.z.zip`。
+如果不想安装，可从 [GitHub Releases](https://github.com/N0mAdam0n/question-bank-Nom/releases) 下载 `QuestionBank-Portable-x.y.z.zip`。
 
 1. 将 ZIP **完整解压**到当前 Windows 用户有写入权限的目录，例如文档目录或其他普通文件夹。不要从 ZIP 预览窗口直接运行，也不建议放在 `Program Files` 等受保护目录。
 2. 双击解压目录中的 `question-bank.exe`，按首次启动向导创建管理员账号。

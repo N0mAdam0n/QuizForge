@@ -16,7 +16,8 @@ const isSuperuser = computed(() => !!user.value?.is_superuser)
 const { state: updateState, check: checkUpdate } = useUpdateCheck()
 const localVersion = ref<string>('-')
 
-const REPO_URL = 'https://github.com/gygy-open/question-bank'
+const REPO_URL = 'https://github.com/N0mAdam0n/question-bank-Nom'
+const UPSTREAM_REPO_URL = 'https://github.com/gygy-open/question-bank'
 const ISSUE_URL = `${REPO_URL}/issues/new`
 
 // 手动维护的共创者名单：名字 + 一句致敬描述
@@ -117,13 +118,41 @@ onMounted(async () => {
       </div>
     </section>
 
+    <section class="space-y-4 rounded-[20px] border border-border/50 bg-background/70 p-6">
+      <div class="flex items-center gap-2">
+        <Info class="h-5 w-5 text-primary" />
+        <h2 class="text-xl font-bold tracking-tight">原项目来源与修改声明</h2>
+      </div>
+      <div class="space-y-3 text-sm leading-6 text-muted-foreground">
+        <p>
+          本项目基于
+          <a :href="UPSTREAM_REPO_URL" target="_blank" rel="noopener noreferrer" class="font-medium text-primary underline underline-offset-4">
+            gygy-open/question-bank
+          </a>
+          开发。原项目作者及贡献者的版权与许可声明继续适用于相应原始代码；本仓库由
+          N0mAdam0n 独立维护，已对功能和实现进行修改。
+        </p>
+        <p>
+          本分支新增和调整了本地题库识别、Windows Lite 便携部署及自主练习等功能。它不是原项目的官方发行版，也不代表原项目作者背书。
+          当前源代码及本分支发布版本请以
+          <a :href="REPO_URL" target="_blank" rel="noopener noreferrer" class="font-medium text-primary underline underline-offset-4">
+            N0mAdam0n/question-bank-Nom
+          </a>
+          为准。
+        </p>
+        <p>
+          本仓库采用 AGPL-3.0-or-later。完整许可文本与仓库中保留的版权、许可文件具有优先效力；此页面仅作来源说明，不替代任何代码文件或第三方依赖要求保留的声明。
+        </p>
+      </div>
+    </section>
+
     <!-- 共创者区域：情感化设计的核心体现 -->
     <section class="mt-8">
       <!-- 鸣谢标题改为居中对齐，维持和顶部 Hero 的中轴对称 -->
       <div class="flex flex-col items-center justify-center gap-1 mb-8 text-center">
         <Heart class="h-6 w-6 text-primary/80 mb-1 fill-primary/10 dark:fill-primary/20" />
         <h2 class="text-xl font-bold tracking-tight">特别鸣谢</h2>
-        <p class="text-sm text-muted-foreground">感谢陪伴本项目成长并默默付出的每一位朋友</p>
+        <p class="text-sm text-muted-foreground">感谢原项目作者、贡献者以及陪伴本分支成长的朋友</p>
       </div>
       
       <div class="grid gap-4 sm:grid-cols-2">

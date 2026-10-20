@@ -14,7 +14,7 @@ hero:
       link: /guide/editions
     - theme: alt
       text: GitHub
-      link: https://github.com/gygy-open/question-bank
+      link: https://github.com/N0mAdam0n/question-bank-Nom
 
 features:
   - title: 多格式智能导入

@@ -26,7 +26,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import UserProfileDialog from '~/components/UserProfileDialog.vue'
 import ChangePasswordDialog from '~/components/ChangePasswordDialog.vue'
 import { useColorMode } from '@vueuse/core'
-import { BookOpen, ChevronsUpDown, ListTree, LogOut, Settings, Sparkles, User, Users, Tags, Library, HelpCircle, KeyRound, Activity, Layers, Info, Moon, Sun, Bot, Lock } from '@lucide/vue'
+import { BookOpen, ChevronsUpDown, ListTree, LogOut, Settings, Sparkles, User, Users, Tags, Library, HelpCircle, KeyRound, Activity, Layers, Info, Moon, Sun, Bot, Lock, Dumbbell } from '@lucide/vue'
 
 const props = withDefaults(defineProps<SidebarProps>(), {
   collapsible: "icon",
@@ -73,6 +73,14 @@ const navActiveClass = 'border-l-2 border-transparent data-[active=true]:border-
       <SidebarGroup>
         <SidebarGroupContent class="flex flex-col gap-2">
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton as-child :is-active="route.path === '/practice'" :class="navActiveClass">
+                <NuxtLink to="/practice">
+                  <Dumbbell />
+                  <span>自主练习</span>
+                </NuxtLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 :is-active="chat.isOpen.value && !chat.isMinimized.value"

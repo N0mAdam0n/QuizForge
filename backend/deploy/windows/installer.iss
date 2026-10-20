@@ -30,7 +30,7 @@
 AppId={{8F3A2B14-9C7E-4D6A-B1F2-3E5C7A9D0B11}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppPublisher=gygy-open
+AppPublisher=N0mAdam0n
 DefaultDirName={autopf}\QuestionBank
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes

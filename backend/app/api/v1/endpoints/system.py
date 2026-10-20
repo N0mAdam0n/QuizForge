@@ -7,7 +7,7 @@ router = APIRouter()
 
 # GitHub repository the desktop releases are published to. The frontend uses
 # this to query the latest release and prompt the user to update.
-GITHUB_REPO = "gygy-open/question-bank"
+GITHUB_REPO = "N0mAdam0n/question-bank-Nom"
 
 
 @router.get("/version")

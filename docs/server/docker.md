@@ -15,14 +15,14 @@
 - 一台安装了 **Docker** 与 **Docker Compose** 的服务器（Linux 推荐）
 - 可访问的 AI 供应商（Gemini / OpenAI / 兼容 API）
 
-镜像已通过 CI 自动构建并发布到 GitHub Container Registry（`ghcr.io/gygy-open/question-bank-backend`、`ghcr.io/gygy-open/question-bank-frontend`），推荐直接拉取，无需在服务器上本地构建。`docker-compose.yml` 中 `backend` / `worker` / `frontend` 均已配置好对应的 `image:`，默认拉取 `latest`。
+当前仓库的镜像由 CI 自动构建并发布到 GitHub Container Registry（`ghcr.io/n0madamon/question-bank-nom-backend`、`ghcr.io/n0madamon/question-bank-nom-frontend`），推荐直接拉取，无需在服务器上本地构建。`docker-compose.yml` 中 `backend` / `worker` / `frontend` 均已配置好对应的 `image:`，默认拉取 `latest`。
 
 ## 部署步骤
 
 ```bash
 # 1. 只需 docker-compose.yml 与 .env.example 两个文件即可，无需克隆完整仓库
-curl -O https://raw.githubusercontent.com/gygy-open/question-bank/main/docker-compose.yml
-curl -O https://raw.githubusercontent.com/gygy-open/question-bank/main/.env.example
+curl -O https://raw.githubusercontent.com/N0mAdam0n/question-bank-Nom/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/N0mAdam0n/question-bank-Nom/main/.env.example
 cp .env.example .env
 ```
 
@@ -47,13 +47,13 @@ docker compose exec backend python scripts/create_superuser.py
 
 ## 中国大陆加速
 
-CI 在发布到 GHCR 的同时会把**同一份镜像**推到阿里云容器镜像服务（ACR，杭州），tag 与国际版完全一致；mysql / chromadb 也已同步一份。仓库均为公开，无需 `docker login`。
+此配置使用 GHCR 上由当前仓库发布的应用镜像，并通过 ACR 镜像拉取 MySQL / ChromaDB 依赖。应用镜像是否可访问仍取决于 GHCR 网络连通性。
 
 在部署步骤基础上只多一条命令 —— 把加速配置下载成 `docker-compose.override.yml`，Compose 会自动加载它：
 
 ```bash
 curl -o docker-compose.override.yml \
-  https://raw.githubusercontent.com/gygy-open/question-bank/main/docker-compose.cn.yml
+  https://raw.githubusercontent.com/N0mAdam0n/question-bank-Nom/main/docker-compose.cn.yml
 
 docker compose pull
 docker compose up -d
@@ -102,7 +102,7 @@ docker compose pull
 docker compose up -d
 ```
 
-默认使用 `latest` 标签（对应 `main` 分支最新构建）。如需锁定到具体版本，在 `.env` 中设置 `IMAGE_TAG`（如 `1.2.0`），再执行 `docker compose pull && docker compose up -d`。可用标签见 [容器包页面](https://github.com/gygy-open/question-bank/pkgs/container/question-bank-backend)。
+默认使用 `latest` 标签（对应 `main` 分支最新构建）。如需锁定到具体版本，在 `.env` 中设置 `IMAGE_TAG`（如 `1.2.0`），再执行 `docker compose pull && docker compose up -d`。可用标签见[后端容器包页面](https://github.com/N0mAdam0n/question-bank-Nom/pkgs/container/question-bank-nom-backend)和[前端容器包页面](https://github.com/N0mAdam0n/question-bank-Nom/pkgs/container/question-bank-nom-frontend)。
 
 更多见 [运维](/server/operations) 与 [数据库与迁移](/server/database)。
 
