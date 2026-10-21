@@ -325,6 +325,58 @@ def test_local_parser_keeps_post_answer_notes_out_of_the_answer():
     assert question["warnings"] == []
 
 
+def test_local_parser_handles_pandoc_bold_options_answers_and_analysis():
+    text = (
+        "# 示例题库\n\n"
+        "1.1. 由图可知，以下正确的是？ ![](media/image1.png){width=\"6in\"}\n\n"
+        "**A.** 选项甲\n\n"
+        "**B.** 选项乙\n\n"
+        "**C.** 选项丙\n\n"
+        "**D.** 选项丁\n\n"
+        "**答案:** B\n\n"
+        "**解析:** 由图中关系可得，选择 B。\n\n"
+        "\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\n\n"
+        "2. 第二题（  ）\n\n"
+        "**A.** 选项一\n\n"
+        "**B.** 选项二\n\n"
+        "**答案:** A\n\n"
+        "**解析:** 第二题解析。"
+    )
+
+    questions = parse_local(text).questions
+
+    assert len(questions) == 2
+    assert questions[0]["source_number"] == "1.1"
+    assert questions[0]["content"].startswith("由图可知，以下正确的是？")
+    assert "![](media/image1.png)" in questions[0]["content"]
+    assert questions[0]["options"] == [
+        "A. 选项甲",
+        "B. 选项乙",
+        "C. 选项丙",
+        "D. 选项丁",
+    ]
+    assert questions[0]["answer"] == "B"
+    assert questions[0]["analysis"] == "由图中关系可得，选择 B。"
+    assert questions[1]["options"] == ["A. 选项一", "B. 选项二"]
+    assert questions[1]["answer"] == "A"
+    assert questions[1]["analysis"] == "第二题解析。"
+
+
+def test_local_parser_handles_pandoc_bold_spans_that_include_option_or_answer_text():
+    text = (
+        "1. 选择正确项\n"
+        "**A. 1**5\n"
+        "**B.** 2\n"
+        "**答案: AB**"
+    )
+
+    question = parse_local(text).questions[0]
+
+    assert question["options"] == ["A. 15", "B. 2"]
+    assert question["answer"] == "AB"
+    assert question["warnings"] == []
+
+
 def test_local_parser_keeps_tagged_format_compatibility():
     result = parse_local("【题目】1 + 1 = ?\n【答案】2")
 

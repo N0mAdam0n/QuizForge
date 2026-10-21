@@ -112,11 +112,48 @@ _ANALYSIS_LINE_RE = re.compile(
     re.IGNORECASE,
 )
 _OPTION_LINE_RE = re.compile(r'^\s*([A-Z])\s*[.、．)]\s*(.*?)\s*$', re.IGNORECASE)
-_SEPARATOR_LINE_RE = re.compile(r'^\s*[-_—=]{3,}\s*$')
+_SEPARATOR_LINE_RE = re.compile(r'^\s*(?:\\?[-_—=]\s*){3,}$')
+_PANDOC_OPTION_LABEL_RE = re.compile(r'^\s*\*\*([A-Z])\s*([.、．)])\*\*(.*)$', re.IGNORECASE)
+_PANDOC_OPTION_CONTENT_RE = re.compile(
+    r'^\s*\*\*([A-Z])\s*([.、．)])\s*(.*?)\*\*(.*)$',
+    re.IGNORECASE,
+)
+_PANDOC_FIELD_LABEL_RE = re.compile(
+    r'^\s*\*\*(参考答案|正确答案|答案|解析|详解|解答|分析)\s*[:：]?\*\*\s*(.*?)\s*$',
+    re.IGNORECASE,
+)
+_PANDOC_FIELD_CONTENT_RE = re.compile(
+    r'^\s*\*\*(参考答案|正确答案|答案|解析|详解|解答|分析)\s*[:：]\s*(.*?)\*\*(.*)$',
+    re.IGNORECASE,
+)
 
 
 def _strip_blockquote_prefix(line: str) -> str:
     return _BLOCKQUOTE_PREFIX_RE.sub('', line, count=1)
+
+
+def _normalize_pandoc_structure_line(line: str) -> str:
+    """Unwrap Pandoc emphasis around structural labels without changing question text."""
+    option_match = _PANDOC_OPTION_LABEL_RE.match(line)
+    if option_match:
+        letter, punctuation, rest = option_match.groups()
+        return f"{letter}{punctuation}{rest}"
+
+    option_content_match = _PANDOC_OPTION_CONTENT_RE.match(line)
+    if option_content_match:
+        letter, punctuation, emphasized, rest = option_content_match.groups()
+        return f"{letter}{punctuation} {emphasized}{rest}"
+
+    field_match = _PANDOC_FIELD_LABEL_RE.match(line)
+    if field_match:
+        label, rest = field_match.groups()
+        return f"{label}: {rest}"
+
+    field_content_match = _PANDOC_FIELD_CONTENT_RE.match(line)
+    if field_content_match:
+        label, emphasized, rest = field_content_match.groups()
+        return f"{label}: {emphasized}{rest}"
+    return re.sub(r"^\*\*(.*?)\*\*$", r"\1", line)
 
 
 def _is_section_heading(line: str) -> bool:
@@ -680,7 +717,7 @@ def parse_numbered(text: str) -> ExtractionResult:
             pending_text.append(line)
             continue
 
-        normalized_line = re.sub(r"^\*\*(.*?)\*\*$", r"\1", line)
+        normalized_line = _normalize_pandoc_structure_line(line)
         answer_match = _ANSWER_LINE_RE.fullmatch(normalized_line)
         if answer_match:
             current_field = "answer"

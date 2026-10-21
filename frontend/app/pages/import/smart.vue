@@ -58,7 +58,7 @@ definePageMeta({
 const step = ref<'upload' | 'review' | 'success'>('upload')
 const stepIndex = computed(() => ({ upload: 1, review: 2, success: 3 })[step.value])
 const activeTab = ref<'file' | 'text'>('file')
-const parseMethod = ref<'ai' | 'structured'>('ai')
+const parseMethod = ref<'auto' | 'ai' | 'structured'>('auto')
 const importMode = ref<'extract' | 'solve'>('extract')
 const file = ref<File | null>(null)
 const folderInput = ref<HTMLInputElement | null>(null)
@@ -122,8 +122,14 @@ const visibleImportList = computed(() => {
 // Global Settings
 const globalSettings = ref({
     subject_id: undefined as number | undefined,
-    status: 'pending' as 'draft' | 'pending' | 'published',
     source: '' as string,
+})
+const questionScope = ref<CompositionScope>('personal')
+
+watch([questionScope, saveAsComposition], ([bankScope, savingComposition]) => {
+    if (bankScope === 'personal' && savingComposition) {
+        compositionScope.value = 'personal'
+    }
 })
 
 // 本地解析读取文本中的图片引用，不处理单独上传的图片。
@@ -241,7 +247,7 @@ const handlePaste = async (e: ClipboardEvent) => {
 }
 
 const handleAutoUpload = () => {
-    if (!file.value && !pastedImage.value) return;
+    if (!file.value && !pastedImage.value && !markdownContent.value.trim()) return;
     if (!globalSettings.value.subject_id) {
         toast.error('请先选择所属学科')
         return
@@ -250,10 +256,10 @@ const handleAutoUpload = () => {
         parseMethod.value === 'structured'
         && (pastedImage.value || file.value?.type.startsWith('image/'))
     ) {
-        error.value = '本地多策略识别无法直接识别独立图片，请切换到 AI 识别。'
+        error.value = '本地结构识别无法直接识别独立图片，请切换到 AI 识别。'
         return
     }
-    if (parseMethod.value === 'ai' && embeddingConfigured.value && !chromaReachable.value) {
+    if (parseMethod.value !== 'structured' && embeddingConfigured.value && !chromaReachable.value) {
         if (!confirm('知识点向量库暂时不可达，是否跳过知识点自动匹配继续导入？')) return
     }
 
@@ -277,8 +283,10 @@ const toDrafts = (items: ExtractedQuestionItem[] | undefined | null): ImportDraf
 const acceptExtraction = (data: any) => {
     const drafts = toDrafts(data.questions)
     // 本地解析未识别到题目时留在上传页，提供可操作的反馈而不是展示空审核页。
-    if (parseMethod.value === 'structured' && drafts.length === 0) {
-        error.value = '未识别到题目，请检查是否使用【题目】标签或以题号开头（如“1. 题干”）；也可切换 AI 识别。'
+    if (parseMethod.value !== 'ai' && drafts.length === 0) {
+        error.value = parseMethod.value === 'auto'
+            ? '自动识别未能提取到题目，请检查文档格式，或切换到 AI 识别。'
+            : '未识别到题目，请检查是否使用【题目】标签或以题号开头（如“1. 题干”）；也可切换 AI 识别。'
         showFormatGuide.value = true
         return
     }
@@ -439,7 +447,7 @@ const handleImport = async (proceedWithPartial = false) => {
             const d: ImportDraft = JSON.parse(JSON.stringify(item))
             d.subject_id = d.subject_id || globalSettings.value.subject_id
             d.source = globalSettings.value.source || ''
-            d.status = d.answer ? globalSettings.value.status : 'draft'
+            d.status = 'draft'
             return {
                 ...buildQuestionPayload(d),
                 ai_suggested_tags: d.ai_suggested_tags,
@@ -453,6 +461,7 @@ const handleImport = async (proceedWithPartial = false) => {
 
         const body = {
             scope: compositionScope.value,
+            question_scope: questionScope.value,
             questions: payloadQuestions,
             outline: buildSubmitOutline(paper.value, selectedItems),
             save_as_composition: saveAsComposition.value,
@@ -460,7 +469,6 @@ const handleImport = async (proceedWithPartial = false) => {
             folder_id: compositionFolderId.value,
             renumber: renumber.value,
             proceed_with_partial: proceedWithPartial,
-            status: globalSettings.value.status,
             filename: file.value?.name ?? null,
             file_path: uploadedFilePath.value,
             content_sha256: contentSha256.value,
@@ -570,7 +578,7 @@ const reset = () => {
         <!-- 三步流程指示：只用于展示进度，不支持点击跳转 -->
         <Stepper :model-value="stepIndex" class="max-w-4xl mx-auto w-full">
             <StepperItem
-                v-for="(label, i) in ['上传', '审核', '完成']"
+                v-for="(label, i) in ['上传', '审核与发布', '完成']"
                 :key="label"
                 v-slot="{ state }"
                 :step="i + 1"
@@ -723,7 +731,21 @@ const reset = () => {
                         <h3 class="text-lg font-medium mb-4">个性化解析设置</h3>
                         
                         <!-- Primary Parsing Methods -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div
+                                class="flex items-start space-x-3 border-2 rounded-lg p-4 cursor-pointer transition-all hover:bg-accent/50 bg-background"
+                                :class="parseMethod === 'auto' ? 'border-primary ring-1 ring-primary shadow-sm' : 'border-muted'"
+                                @click="parseMethod = 'auto'"
+                            >
+                                <div class="mt-0.5"><CheckCircle2 v-if="parseMethod === 'auto'" class="h-5 w-5 text-primary" /><div v-else class="h-5 w-5 rounded-full border opacity-50"/></div>
+                                <div>
+                                    <div class="text-base font-medium flex items-center gap-2">
+                                        ⚡ 自动多策略
+                                    </div>
+                                    <div class="text-sm text-muted-foreground mt-1">优先本地拆分题干、选项和答案；识别质量不足时自动使用 AI。</div>
+                                </div>
+                            </div>
+
                             <div
                                 class="flex items-start space-x-3 border-2 rounded-lg p-4 cursor-pointer transition-all hover:bg-accent/50 bg-background"
                                 :class="parseMethod === 'ai' ? 'border-primary ring-1 ring-primary shadow-sm' : 'border-muted'"
@@ -745,7 +767,7 @@ const reset = () => {
                             >
                                 <div class="mt-0.5"><CheckCircle2 v-if="parseMethod === 'structured'" class="h-5 w-5 text-primary" /><div v-else class="h-5 w-5 rounded-full border opacity-50"/></div>
                                 <div class="flex-1">
-                                    <div class="text-base font-medium">📝 本地多策略识别</div>
+                                    <div class="text-base font-medium">📝 本地结构识别</div>
                                     <div class="text-sm text-muted-foreground mt-1">支持标签模板和常见题号、选项、答案排版；不调用 AI。</div>
                                     <Button
                                         variant="link"
@@ -959,13 +981,12 @@ const reset = () => {
                         </label>
                         <Separator orientation="vertical" class="hidden h-5 sm:block" />
                         <div class="flex items-center gap-1.5">
-                            <Label class="shrink-0 text-xs text-muted-foreground">状态</Label>
-                            <Select v-model="globalSettings.status">
-                                <SelectTrigger class="h-8 w-[124px] bg-background text-xs"><SelectValue /></SelectTrigger>
+                            <Label class="shrink-0 text-xs text-muted-foreground">题库空间</Label>
+                            <Select v-model="questionScope">
+                                <SelectTrigger class="h-8 w-[148px] bg-background text-xs"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="draft">草稿 (Draft)</SelectItem>
-                                    <SelectItem value="pending">待审核 (Pending)</SelectItem>
-                                    <SelectItem value="published">已发布 (Published)</SelectItem>
+                                    <SelectItem value="personal">个人空间</SelectItem>
+                                    <SelectItem value="shared">共享空间</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -974,6 +995,13 @@ const reset = () => {
                             <Input v-model="globalSettings.source" placeholder="例如：2023年期末考试" class="h-8 bg-background text-xs" />
                         </div>
                     </div>
+                    <p class="basis-full px-1 text-xs text-muted-foreground">
+                        {{ questionScope === 'personal'
+                            ? (saveAsComposition
+                                ? '保存为稿件时，整份个人题库会先标记为待发布；之后可在题库详情中发布。有答案的题目发布后即可刷题。'
+                                : '不保存为稿件时，有答案的个人题目会直接发布；没有答案的题目始终保存为草稿。')
+                            : '共享空间中有答案的题目由有审核权限的用户审核发布；未达到学科审核次数时进入待审核。没有答案的题目始终保存为草稿。' }}
+                    </p>
                     <div class="flex flex-1 items-center justify-between gap-3 lg:justify-end">
                         <div class="flex items-center gap-2">
                             <button
@@ -994,7 +1022,7 @@ const reset = () => {
                             <Button class="min-w-[148px]" @click="handleImport()" :disabled="isImporting || selectedCount === 0">
                                 <Loader2 v-if="isImporting" class="mr-2 h-4 w-4 animate-spin" />
                                 <Save v-else class="mr-2 h-4 w-4" />
-                                确认导入 ({{ selectedCount }})
+                                审核并导入 ({{ selectedCount }})
                             </Button>
                         </div>
                     </div>
@@ -1035,10 +1063,10 @@ const reset = () => {
                     <NuxtLink :to="`/compositions/${compositionScope}/${createdComposition.id}`">打开稿件</NuxtLink>
                 </Button>
                 <Button as-child :variant="createdComposition ? 'outline' : 'default'" v-if="importedTaskId">
-                    <NuxtLink :to="`/questions?import_task_id=${importedTaskId}`">查看本次导入题目</NuxtLink>
+                    <NuxtLink :to="`/question-banks/${importedTaskId}`">查看本次题库</NuxtLink>
                 </Button>
                 <Button as-child v-else>
-                    <NuxtLink to="/questions">查看题库</NuxtLink>
+                    <NuxtLink to="/question-banks">查看我的题库</NuxtLink>
                 </Button>
             </div>
         </div>

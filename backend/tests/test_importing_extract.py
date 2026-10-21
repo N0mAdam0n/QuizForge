@@ -5,7 +5,13 @@ from app.models.subject import Subject
 from app.models.tag import Tag
 from app.models.tag_category import TagCategory
 from app.schemas.ai import AIQuestion
-from app.services.importing.extract import AIExtractor, TemplateExtractor, _assign_temp_ids
+from app.services.importing.contracts import ExtractionResult
+from app.services.importing.extract import (
+    AIExtractor,
+    MultiStrategyExtractor,
+    TemplateExtractor,
+    _assign_temp_ids,
+)
 from app.services.importing.prompt import PromptBuilder
 
 
@@ -38,6 +44,41 @@ async def test_template_extractor_accepts_numbered_questions_without_tags():
     assert len(result.questions) == 1
     assert "![网络图](/static/media/sample/topology.png)" in result.questions[0]["content"]
     assert result.questions[0]["answer"] == "A"
+
+
+async def test_multi_strategy_prefers_complete_local_parse_without_calling_ai():
+    class UnexpectedAI:
+        async def extract(self, *args, **kwargs):
+            raise AssertionError("AI should not run for a complete local parse")
+
+    extractor = MultiStrategyExtractor(ai_extractor=UnexpectedAI())
+    result = await extractor.extract(
+        "1. 1 + 1 = ?\nA. 1\nB. 2\n答案：B",
+        db=None,
+    )
+
+    assert result.questions[0]["content"] == "1 + 1 = ?"
+    assert result.questions[0]["options"] == ["A. 1", "B. 2"]
+    assert result.questions[0]["answer"] == "B"
+
+
+async def test_multi_strategy_falls_back_to_ai_when_local_parse_finds_no_questions():
+    class StubAI:
+        def __init__(self):
+            self.called = False
+
+        async def extract(self, *args, **kwargs):
+            self.called = True
+            return ExtractionResult(questions=[{"content": "识别结果"}])
+
+    ai = StubAI()
+    result = await MultiStrategyExtractor(ai_extractor=ai).extract(
+        "没有题号边界的文档",
+        db=None,
+    )
+
+    assert ai.called
+    assert result.questions == [{"content": "识别结果"}]
 
 
 async def test_prompt_builder_injects_tag_context(db_session):

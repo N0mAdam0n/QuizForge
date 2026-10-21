@@ -11,7 +11,7 @@ from app.core.permissions import SubjectRole
 from app.core.security import create_access_token
 from app.models.composition import Composition
 from app.models.import_task import CompositionImportState, ImportTask
-from app.models.question import Question
+from app.models.question import Question, QuestionStatus, QuestionVisibility
 from app.models.subject import Subject
 from app.models.subject_member import SubjectMember
 from app.models.user import User
@@ -119,6 +119,104 @@ async def test_import_without_composition_creates_questions_only(client, ctx, db
 
     task = (await db_session.execute(select(ImportTask))).scalars().one()
     assert task.composition_state is CompositionImportState.NOT_REQUESTED
+
+
+async def test_personal_import_publishes_answered_questions(client, ctx, db_session):
+    response = await client.post(
+        f"{API}/subjects/{ctx['subject'].id}/paper-imports",
+        json={
+            "scope": "personal",
+            "question_scope": "personal",
+            "questions": [_question("personal-1", "个人题")],
+            "outline": [{"kind": "question_ref", "temp_id": "personal-1"}],
+        },
+        headers=_auth(ctx["editor"]),
+    )
+
+    assert response.status_code == 200, response.text
+    question = (
+        await db_session.execute(
+            select(Question).where(Question.import_task_id == response.json()["import_task_id"])
+        )
+    ).scalar_one()
+    assert question.status == QuestionStatus.PUBLISHED.value
+    assert question.visibility == QuestionVisibility.PRIVATE.value
+
+
+async def test_saving_as_composition_keeps_personal_bank_pending_until_published(
+    client, ctx, db_session
+):
+    response = await client.post(
+        f"{API}/subjects/{ctx['subject'].id}/paper-imports",
+        json={
+            "scope": "personal",
+            "question_scope": "personal",
+            "questions": [_question("saved-1", "稿件题")],
+            "outline": [{"kind": "question_ref", "temp_id": "saved-1"}],
+            "save_as_composition": True,
+            "title": "待发布练习卷",
+        },
+        headers=_auth(ctx["editor"]),
+    )
+    assert response.status_code == 200, response.text
+    task = await db_session.get(ImportTask, response.json()["import_task_id"])
+    question = (
+        await db_session.execute(
+            select(Question).where(Question.import_task_id == task.id)
+        )
+    ).scalar_one()
+    assert task.scope_type == "personal"
+    assert task.publication_status == "pending"
+    assert question.status == QuestionStatus.PENDING.value
+    assert response.json()["composition_id"] is not None
+
+
+async def test_shared_import_by_manager_records_review_and_publishes(client, ctx, db_session, grant_role):
+    manager = await _seed_user(db_session, username="paper_manager")
+    await grant_role(manager, ctx["subject"], SubjectRole.MANAGER)
+
+    response = await client.post(
+        f"{API}/subjects/{ctx['subject'].id}/paper-imports",
+        json={
+            "scope": "shared",
+            "question_scope": "shared",
+            "questions": [_question("shared-1", "共享题")],
+            "outline": [{"kind": "question_ref", "temp_id": "shared-1"}],
+        },
+        headers=_auth(manager),
+    )
+
+    assert response.status_code == 200, response.text
+    question = (
+        await db_session.execute(
+            select(Question).where(Question.import_task_id == response.json()["import_task_id"])
+        )
+    ).scalar_one()
+    assert question.status == QuestionStatus.PUBLISHED.value
+    assert question.visibility == QuestionVisibility.PUBLIC.value
+    assert question.review_count == 1
+
+
+async def test_shared_import_by_editor_waits_for_review(client, ctx, db_session):
+    response = await client.post(
+        f"{API}/subjects/{ctx['subject'].id}/paper-imports",
+        json={
+            "scope": "shared",
+            "question_scope": "shared",
+            "questions": [_question("shared-pending-1", "待审共享题")],
+            "outline": [{"kind": "question_ref", "temp_id": "shared-pending-1"}],
+        },
+        headers=_auth(ctx["editor"]),
+    )
+
+    assert response.status_code == 200, response.text
+    question = (
+        await db_session.execute(
+            select(Question).where(Question.import_task_id == response.json()["import_task_id"])
+        )
+    ).scalar_one()
+    assert question.status == QuestionStatus.PENDING.value
+    assert question.visibility == QuestionVisibility.PUBLIC.value
 
 
 # --------------------------------------------------------------------------- #
@@ -279,7 +377,7 @@ async def test_private_question_blocked_from_shared_composition(client, ctx, db_
     )
 
     assert response.status_code == 422
-    assert "私有题" in response.json()["detail"]
+    assert "个人题库" in response.json()["detail"]
     # 被拒绝时不得留下任何题目。
     assert (await db_session.execute(select(Question))).scalars().all() == []
 
@@ -445,7 +543,7 @@ async def test_preview_reports_blocking_and_degraded_without_writing(client, ctx
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["importable_count"] == 1
-    assert "私有题" in body["blocking_reason"]
+    assert "个人题库" in body["blocking_reason"]
     assert body["degraded"][0]["reason"] == "表格结构无法完整表达"
     # 预检不写库。
     assert (await db_session.execute(select(Question))).scalars().all() == []

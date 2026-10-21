@@ -42,6 +42,11 @@ class ImportTask(Base):
     content_sha256 = Column(String(64), nullable=True, index=True)
     # 整卷导入提交的幂等键;重放同一请求返回既有结果而非重复建题/建稿。
     idempotency_key = Column(String(64), nullable=True, unique=True)
+    # Question-bank space is independent from any composition created by the import.
+    scope_type = Column(String(16), nullable=False, default="shared", server_default="shared")
+    publication_status = Column(
+        String(16), nullable=False, default="published", server_default="published"
+    )
     composition_state = Column(
         SQLEnum(CompositionImportState, values_callable=lambda x: [e.value for e in x]),
         nullable=False,

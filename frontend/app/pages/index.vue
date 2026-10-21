@@ -1,5 +1,5 @@
 <script setup lang="ts">
-await navigateTo('/questions')
+await navigateTo('/question-banks')
 </script>
 
 <template>

@@ -46,6 +46,7 @@ async def preview_paper_import(
         paper_import_caps.PaperImportPreviewInput(
             subject_id=subject_id,
             scope_type=scope_type,
+            question_scope=ScopeType(payload.question_scope or payload.scope),
             owner_id=owner_id,
             questions=[q.model_dump() for q in payload.questions],
             outline=[o.model_dump() for o in payload.outline],
@@ -67,6 +68,7 @@ async def commit_paper_import(
         paper_import_caps.PaperImportCommitInput(
             subject_id=subject_id,
             scope_type=scope_type,
+            question_scope=ScopeType(payload.question_scope or payload.scope),
             owner_id=owner_id,
             questions=[q.model_dump() for q in payload.questions],
             outline=[o.model_dump() for o in payload.outline],
@@ -75,7 +77,6 @@ async def commit_paper_import(
             folder_id=payload.folder_id,
             renumber=payload.renumber,
             proceed_with_partial=payload.proceed_with_partial,
-            status=payload.status,
             filename=payload.filename,
             file_path=payload.file_path,
             content_sha256=payload.content_sha256,

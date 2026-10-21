@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any, List, Optional
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app import crud, models, schemas
 from app.core import permissions
@@ -155,7 +155,8 @@ class ReviewQuestion(Capability[QuestionReviewInput, Question]):
     name = "question.review"
     description = "审核一道题目:通过则累加审核次数并按学科阈值决定是否发布;驳回则退回草稿。"
     input_model = QuestionReviewInput
-    authz = Authz.NONE
+    authz = Authz.PERMISSION
+    permission = Permission.REVIEW_QUESTION
     scope = Scope.SUBJECT
     mutating = True
 
@@ -181,6 +182,19 @@ class ReviewQuestion(Capability[QuestionReviewInput, Question]):
 
         target.updated_by = ctx.actor.id
         ctx.db.add(target)
+        if target.import_task_id is not None:
+            task = await ctx.db.get(ImportTask, target.import_task_id)
+            if task is not None and task.scope_type == "shared":
+                unpublished_count = await ctx.db.scalar(
+                    select(func.count(Question.id)).where(
+                        Question.import_task_id == task.id,
+                        Question.deleted_at.is_(None),
+                        Question.answer.is_not(None),
+                        Question.status != QuestionStatus.PUBLISHED.value,
+                    )
+                )
+                task.publication_status = "published" if unpublished_count == 0 else "pending"
+                ctx.db.add(task)
 
         await log_activity(
             ctx.db,

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from typing import Optional, Protocol
 
@@ -141,3 +142,99 @@ class TemplateExtractor:
         subject_id: Optional[int] = None,
     ) -> ExtractionResult:
         return parse_local(content)
+
+
+class MultiStrategyExtractor:
+    """Prefer deterministic parsing and fall back to AI only when structure is weak."""
+
+    _QUESTION_BOUNDARY_RE = re.compile(
+        r"(?m)^\s*(?:\*\*)?\(?\d+(?:\.\d+)*\)?[.、．)]\s*\S"
+    )
+    _TAG_BOUNDARY_RE = re.compile(r"(?m)^\s*(?:\d+[.、．)]\s*)?[【\[]\s*(?:题目|题干|question|title)\s*[】\]]", re.I)
+    _CONTAMINATED_CONTENT_RE = re.compile(
+        r"(?im)^\s*(?:\*\*)?(?:参考答案|正确答案|答案|解析|详解|解答)\s*[:：]"
+        r"|^\s*\*\*[A-Z]\s*[.、．)]\*\*"
+    )
+
+    def __init__(
+        self,
+        local_extractor: Optional[ExtractionStrategy] = None,
+        ai_extractor: Optional[ExtractionStrategy] = None,
+        *,
+        confidence_threshold: float = 0.75,
+    ) -> None:
+        self.local_extractor = local_extractor or TemplateExtractor()
+        self.ai_extractor = ai_extractor or AIExtractor()
+        self.confidence_threshold = confidence_threshold
+
+    async def extract(
+        self,
+        content: str,
+        db: AsyncSession,
+        *,
+        image_data: bytes | None = None,
+        filename: str | None = None,
+        mode: str = "extract",
+        subject_id: Optional[int] = None,
+    ) -> ExtractionResult:
+        if mode != "extract" or image_data:
+            return await self.ai_extractor.extract(
+                content,
+                db,
+                image_data=image_data,
+                filename=filename,
+                mode=mode,
+                subject_id=subject_id,
+            )
+
+        local_result = await self.local_extractor.extract(
+            content,
+            db,
+            filename=filename,
+            mode=mode,
+            subject_id=subject_id,
+        )
+        local_score = self._score(local_result, content)
+        if local_score >= self.confidence_threshold:
+            return local_result
+
+        ai_result = await self.ai_extractor.extract(
+            content,
+            db,
+            filename=filename,
+            mode=mode,
+            subject_id=subject_id,
+        )
+        return ai_result if self._score(ai_result, content) > local_score else local_result
+
+    @classmethod
+    def _score(cls, result: ExtractionResult, content: str) -> float:
+        questions = result.questions
+        if not questions:
+            return 0.0
+
+        question_scores: list[float] = []
+        for question in questions:
+            score = 0.45 if str(question.get("content") or "").strip() else 0.0
+            q_type = question.get("q_type")
+            options = question.get("options") or []
+            answer = question.get("answer")
+            has_answer = bool(answer)
+            if q_type in {"single_choice", "multiple_choice"}:
+                score += 0.3 if len(options) >= 2 else 0.0
+                score += 0.2 if has_answer else 0.0
+            elif q_type == "true_false":
+                score += 0.35 if has_answer else 0.0
+            else:
+                score += 0.35 if has_answer else 0.0
+            if not cls._CONTAMINATED_CONTENT_RE.search(str(question.get("content") or "")):
+                score += 0.05
+            question_scores.append(score)
+
+        quality = sum(question_scores) / len(question_scores)
+        expected_count = max(
+            len(cls._QUESTION_BOUNDARY_RE.findall(content)),
+            len(cls._TAG_BOUNDARY_RE.findall(content)),
+        )
+        coverage = min(len(questions) / expected_count, 1.0) if expected_count else 1.0
+        return quality * 0.65 + coverage * 0.35

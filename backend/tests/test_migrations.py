@@ -111,6 +111,63 @@ def test_agent_run_model_snapshot_migration_backfills_history(tmp_path):
     }
 
 
+def test_wrong_book_migration_backfills_incorrect_attempts(tmp_path):
+    async_url, sync_url = _sqlite_urls(tmp_path)
+    cfg = _alembic_config(async_url)
+    command.upgrade(cfg, "b9c0d1e2f3a4")
+
+    engine = create_engine(sync_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(sa.text("""
+                INSERT INTO user (id, username, hashed_password, is_active, is_superuser)
+                VALUES (9101, 'wrong-book-migration-user', 'x', 1, 0)
+            """))
+            conn.execute(sa.text("""
+                INSERT INTO subjects (id, name, slug, required_review_count)
+                VALUES (9102, 'wrong-book-migration-subject', 'wrong-book-migration', 1)
+            """))
+            conn.execute(sa.text("""
+                INSERT INTO import_tasks
+                    (id, user_id, file_path, original_filename, file_type, status)
+                VALUES
+                    (9103, 9101, 'virtual', 'history.docx', 'docx', 'completed')
+            """))
+            conn.execute(sa.text("""
+                INSERT INTO questions
+                    (id, content, answer, q_type, status, subject_id, import_task_id)
+                VALUES
+                    (9104, :content, :answer, 'single_choice', 'published', 9102, 9103)
+            """), {
+                "content": json.dumps({"type": "doc", "content": []}),
+                "answer": json.dumps({"kind": "single_choice", "correct": "a"}),
+            })
+            conn.execute(sa.text("""
+                INSERT INTO practice_attempts
+                    (id, user_id, question_id, subject_id, mode, is_correct, score)
+                VALUES
+                    (9105, 9101, 9104, 9102, 'sequential', 0, 0),
+                    (9106, 9101, 9104, 9102, 'sequential', 0, 0)
+            """))
+
+        command.upgrade(cfg, "head")
+
+        with engine.connect() as conn:
+            row = conn.execute(sa.text("""
+                SELECT question_id, original_filename, wrong_count, question_snapshot
+                  FROM wrong_book_entries
+                 WHERE user_id = 9101
+            """)).mappings().one()
+    finally:
+        engine.dispose()
+
+    snapshot = json.loads(row["question_snapshot"])
+    assert row["question_id"] == 9104
+    assert row["original_filename"] == "history.docx"
+    assert row["wrong_count"] == 2
+    assert snapshot["answer"] == {"kind": "single_choice", "correct": "a"}
+
+
 @pytest.mark.skipif(not MYSQL_TEST_URL, reason="MYSQL_TEST_URL not set (needs a real MySQL)")
 def test_upgrade_head_on_mysql():
     # Only a real MySQL exposes dialect-specific failures (types, ALTER, charset)

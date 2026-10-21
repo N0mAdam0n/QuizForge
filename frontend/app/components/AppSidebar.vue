@@ -26,7 +26,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import UserProfileDialog from '~/components/UserProfileDialog.vue'
 import ChangePasswordDialog from '~/components/ChangePasswordDialog.vue'
 import { useColorMode } from '@vueuse/core'
-import { BookOpen, ChevronsUpDown, ListTree, LogOut, Settings, Sparkles, User, Users, Tags, Library, HelpCircle, KeyRound, Activity, Layers, Info, Moon, Sun, Bot, Lock, Dumbbell } from '@lucide/vue'
+import { BookOpen, ChevronsUpDown, ListTree, LogOut, Settings, Sparkles, User, Users, Tags, Library, HelpCircle, KeyRound, Activity, Layers, Info, Moon, Sun, Bot, Lock, Dumbbell, ClipboardList } from '@lucide/vue'
 
 const props = withDefaults(defineProps<SidebarProps>(), {
   collapsible: "icon",
@@ -71,16 +71,42 @@ const navActiveClass = 'border-l-2 border-transparent data-[active=true]:border-
     </SidebarHeader>
     <SidebarContent>
       <SidebarGroup>
-        <SidebarGroupContent class="flex flex-col gap-2">
+        <SidebarGroupLabel>练习</SidebarGroupLabel>
+        <SidebarGroupContent>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton as-child :is-active="route.path === '/practice'" :class="navActiveClass">
+              <SidebarMenuButton
+                as-child
+                :is-active="route.path === '/practice'"
+                :class="navActiveClass"
+                tooltip="自主练习"
+              >
                 <NuxtLink to="/practice">
                   <Dumbbell />
                   <span>自主练习</span>
                 </NuxtLink>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                as-child
+                :is-active="route.path === '/practice/wrong-book'"
+                :class="navActiveClass"
+                tooltip="错题本"
+              >
+                <NuxtLink to="/practice/wrong-book">
+                  <ClipboardList />
+                  <span>错题本</span>
+                </NuxtLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <SidebarGroup>
+        <SidebarGroupContent class="flex flex-col gap-2">
+          <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
                 :is-active="chat.isOpen.value && !chat.isMinimized.value"
@@ -105,13 +131,13 @@ const navActiveClass = 'border-l-2 border-transparent data-[active=true]:border-
       <SidebarGroup>
         <SidebarGroupContent class="flex flex-col gap-3">
           <div>
-            <SidebarGroupLabel>素材</SidebarGroupLabel>
+            <SidebarGroupLabel>题库</SidebarGroupLabel>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton as-child :is-active="route.path === '/questions'" :class="navActiveClass">
-                  <NuxtLink to="/questions">
+                <SidebarMenuButton as-child :is-active="route.path === '/question-banks' || route.path.startsWith('/question-banks/')" :class="navActiveClass">
+                  <NuxtLink to="/question-banks">
                     <BookOpen />
-                    <span>题目管理</span>
+                    <span>我的题库</span>
                   </NuxtLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>

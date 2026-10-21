@@ -2,7 +2,12 @@ import logging
 from pathlib import Path
 from typing import BinaryIO, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.services.importing.extract import AIExtractor, ExtractionStrategy, TemplateExtractor
+from app.services.importing.extract import (
+    AIExtractor,
+    ExtractionStrategy,
+    MultiStrategyExtractor,
+    TemplateExtractor,
+)
 from app.services.importing.ingest import DocxIngestor, ImageIngestor, MarkdownArchiveIngestor, MarkdownIngestor
 
 logger = logging.getLogger(__name__)
@@ -12,15 +17,26 @@ class DocProcessor:
         self.client = None
         self._ai_extractor = AIExtractor()
         self._template_extractor = TemplateExtractor()
+        self._multi_strategy_extractor = MultiStrategyExtractor(
+            self._template_extractor, self._ai_extractor
+        )
         self._docx_ingestor = DocxIngestor()
         self._markdown_ingestor = MarkdownIngestor()
         self._markdown_archive_ingestor = MarkdownArchiveIngestor()
         self._image_ingestor = ImageIngestor()
 
     def _extractor_for(self, method: str) -> ExtractionStrategy:
-        return self._template_extractor if method == "structured" else self._ai_extractor
+        extractors = {
+            "ai": self._ai_extractor,
+            "structured": self._template_extractor,
+            "auto": self._multi_strategy_extractor,
+        }
+        try:
+            return extractors[method]
+        except KeyError as exc:
+            raise ValueError(f"Unsupported parsing method: {method}") from exc
 
-    async def process_markdown(self, content: str, db: AsyncSession, filename: str = None, task_id: str = None, mode: str = "extract", method: str = "ai", subject_id: Optional[int] = None) -> dict:
+    async def process_markdown(self, content: str, db: AsyncSession, filename: str = None, task_id: str = None, mode: str = "extract", method: str = "auto", subject_id: Optional[int] = None) -> dict:
         """
         Process markdown content directly and extract questions.
         
@@ -30,7 +46,7 @@ class DocProcessor:
             filename: Optional filename
             task_id: Optional task ID (if not provided, a new one will be generated)
             mode: Processing mode ("extract" or "solve")
-            method: Parsing method ("ai" for AI extraction, "structured" for tag-based parsing)
+            method: Parsing method ("auto", "ai", or "structured")
         
         Returns:
             Dict with task_id, content, and extracted questions
@@ -46,7 +62,7 @@ class DocProcessor:
             "paper": extraction.paper,
         }
 
-    async def process_markdown_archive(self, file_path: Path, db: AsyncSession, task_id: str = None, mode: str = "extract", method: str = "ai", subject_id: Optional[int] = None) -> dict:
+    async def process_markdown_archive(self, file_path: Path, db: AsyncSession, task_id: str = None, mode: str = "extract", method: str = "auto", subject_id: Optional[int] = None) -> dict:
         """Extract a markdown archive (zip with local images) and parse questions.
 
         Local image refs are rewritten to /static/media/{task_id}/... before extraction; multiple
@@ -87,7 +103,7 @@ class DocProcessor:
             "paper": extraction.paper,
         }
 
-    async def process_docx(self, file_path: Path, db: AsyncSession = None, task_id: str = None, mode: str = "extract", method: str = "ai", subject_id: Optional[int] = None) -> dict:
+    async def process_docx(self, file_path: Path, db: AsyncSession = None, task_id: str = None, mode: str = "extract", method: str = "auto", subject_id: Optional[int] = None) -> dict:
         """
         Convert docx to markdown, extract media, and parse questions using Gemini.
         """

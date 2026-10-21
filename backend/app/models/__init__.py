@@ -16,6 +16,7 @@ from .agent import AgentRun, AgentStep
 from .prompt import PromptTemplate
 from .paper import Paper, PaperQuestion
 from .practice_attempt import PracticeAttempt
+from .wrong_book_entry import WrongBookEntry
 from .composition import (
     ScopeType,
     CompositionStatus,

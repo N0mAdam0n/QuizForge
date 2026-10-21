@@ -1,26 +1,457 @@
 import re
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from app.api import deps
+from app.core.permissions import Permission, can
 from app.crud.crud_question import visible_questions_filter
+from app.models.import_task import ImportTask
 from app.models.practice_attempt import PracticeAttempt
-from app.models.question import Question, QuestionStatus, QuestionType
+from app.models.question import Question, QuestionStatus, QuestionType, QuestionVisibility
 from app.models.user import User
+from app.models.wrong_book_entry import WrongBookEntry
 from app.schemas.practice import (
     PracticeAnswerResult,
     PracticeAnswerSubmit,
+    ManagedQuestionBank,
     PracticeMode,
+    PracticeQuestionBank,
+    PracticeQuestionBankScopeUpdate,
     PracticeQuestion,
     PracticeQuestionSet,
+    WrongBookQuestion,
 )
 from app.services.question_content import parse_json_field
 
 router = APIRouter()
 _VALID_MODES = {"sequential", "random", "type", "wrong"}
+_VALID_SCOPES = {"personal", "shared"}
+
+
+async def _get_owned_bank(
+    db: deps.SessionDep,
+    *,
+    import_task_id: int,
+    subject_id: int,
+    scope: str,
+    current_user: User,
+) -> ImportTask:
+    conditions = [
+        ImportTask.id == import_task_id,
+        ImportTask.scope_type == scope,
+        ImportTask.publication_status == "published",
+        Question.subject_id == subject_id,
+        Question.import_task_id == ImportTask.id,
+        visible_questions_filter(current_user),
+    ]
+    if scope == "personal":
+        conditions.append(ImportTask.user_id == current_user.id)
+        conditions.append(Question.visibility == QuestionVisibility.PRIVATE.value)
+    else:
+        conditions.append(Question.visibility == QuestionVisibility.PUBLIC.value)
+    result = await db.execute(
+        select(ImportTask)
+        .join(Question, Question.import_task_id == ImportTask.id)
+        .where(*conditions)
+        .limit(1)
+    )
+    task = result.scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=404, detail="Question bank not found")
+    return task
+
+
+@router.get("/question-banks", response_model=list[PracticeQuestionBank])
+async def read_practice_question_banks(
+    db: deps.SessionDep,
+    subject_id: int,
+    scope: str,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> list[PracticeQuestionBank]:
+    if scope not in _VALID_SCOPES:
+        raise HTTPException(status_code=422, detail="Unsupported question-bank scope")
+    if scope == "personal":
+        scope_filter = ImportTask.user_id == current_user.id
+        visibility = QuestionVisibility.PRIVATE.value
+    else:
+        scope_filter = True
+        visibility = QuestionVisibility.PUBLIC.value
+
+    result = await db.execute(
+        select(
+            ImportTask.id,
+            ImportTask.original_filename,
+            ImportTask.user_id,
+            ImportTask.created_at,
+            func.count(func.distinct(Question.id)).label("question_count"),
+        )
+        .join(Question, Question.import_task_id == ImportTask.id)
+        .where(
+            ImportTask.scope_type == scope,
+            ImportTask.publication_status == "published",
+            scope_filter,
+            Question.subject_id == subject_id,
+            Question.status == QuestionStatus.PUBLISHED.value,
+            Question.deleted_at.is_(None),
+            Question.parent_id.is_(None),
+            Question.answer.is_not(None),
+            Question.visibility == visibility,
+            visible_questions_filter(current_user),
+        )
+        .group_by(ImportTask.id, ImportTask.original_filename, ImportTask.created_at)
+        .order_by(func.max(Question.created_at).desc(), ImportTask.id.desc())
+    )
+    return [
+        PracticeQuestionBank(
+            id=row.id,
+            original_filename=row.original_filename,
+            scope=scope,
+            question_count=row.question_count,
+            publication_status="published",
+            created_at=row.created_at,
+            can_change_scope=(
+                row.user_id == current_user.id
+                or can(current_user, Permission.MANAGE_SUBJECT, subject_id=subject_id)
+            ),
+        )
+        for row in result
+    ]
+
+
+@router.get("/wrong-book", response_model=list[WrongBookQuestion])
+async def read_wrong_book(
+    db: deps.SessionDep,
+    subject_id: int | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> list[WrongBookQuestion]:
+    stmt = select(WrongBookEntry).where(WrongBookEntry.user_id == current_user.id)
+    if subject_id is not None:
+        stmt = stmt.where(WrongBookEntry.subject_id == subject_id)
+    stmt = stmt.order_by(WrongBookEntry.last_wrong_at.desc(), WrongBookEntry.id).limit(limit).offset(offset)
+    rows = (await db.execute(stmt)).scalars().all()
+    wrong_questions = []
+    for entry in rows:
+        snapshot = entry.question_snapshot
+        wrong_questions.append(
+            WrongBookQuestion(
+                id=entry.question_id,
+                subject_id=entry.subject_id,
+                import_task_id=entry.import_task_id,
+                original_filename=entry.original_filename,
+                content=snapshot["content"],
+                q_type=snapshot["q_type"],
+                options=snapshot["options"],
+                answer=snapshot["answer"],
+                analysis=snapshot["analysis"],
+                last_wrong_at=entry.last_wrong_at,
+                wrong_count=entry.wrong_count,
+            )
+        )
+    return wrong_questions
+
+
+@router.get("/question-banks/{import_task_id}", response_model=PracticeQuestionBank)
+async def read_practice_question_bank(
+    *,
+    import_task_id: int,
+    subject_id: int,
+    db: deps.SessionDep,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> PracticeQuestionBank:
+    result = await db.execute(
+        select(ImportTask)
+        .join(Question, Question.import_task_id == ImportTask.id)
+        .where(
+            ImportTask.id == import_task_id,
+            Question.subject_id == subject_id,
+            Question.deleted_at.is_(None),
+            visible_questions_filter(current_user),
+        )
+        .limit(1)
+    )
+    row = result.first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Question bank not found")
+    task = row[0]
+    if task.scope_type == "personal" and task.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Question bank not found")
+    return PracticeQuestionBank(
+        id=task.id,
+        original_filename=task.original_filename,
+        scope=task.scope_type,
+        question_count=(await db.scalar(
+            select(func.count(Question.id)).where(
+                Question.import_task_id == task.id,
+                Question.subject_id == subject_id,
+                Question.deleted_at.is_(None),
+            )
+        )) or 0,
+        can_change_scope=(
+            task.user_id == current_user.id
+            or can(current_user, Permission.MANAGE_SUBJECT, subject_id=subject_id)
+        ),
+        publication_status=task.publication_status,
+        created_at=task.created_at,
+    )
+
+
+@router.get("/manage-question-banks", response_model=list[ManagedQuestionBank])
+async def read_managed_question_banks(
+    db: deps.SessionDep,
+    scope: str = "personal",
+    subject_id: int | None = None,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> list[ManagedQuestionBank]:
+    if scope not in _VALID_SCOPES:
+        raise HTTPException(status_code=422, detail="Unsupported question-bank scope")
+    stmt = (
+        select(
+            ImportTask.id,
+            ImportTask.original_filename,
+            ImportTask.scope_type,
+            ImportTask.publication_status,
+            ImportTask.user_id,
+            ImportTask.created_at,
+            func.count(func.distinct(Question.id)).label("question_count"),
+            func.sum(
+                case(
+                    (Question.status == QuestionStatus.PUBLISHED.value, 1),
+                    else_=0,
+                )
+            ).label("published_count"),
+            func.min(Question.subject_id).label("subject_id"),
+        )
+        .join(Question, Question.import_task_id == ImportTask.id)
+        .where(
+            ImportTask.scope_type == scope,
+            Question.deleted_at.is_(None),
+        )
+    )
+    if scope == "personal":
+        stmt = stmt.where(ImportTask.user_id == current_user.id)
+    elif not current_user.is_superuser:
+        from app.core.permissions import accessible_subject_ids
+
+        subject_ids = accessible_subject_ids(current_user) or set()
+        stmt = stmt.where(Question.subject_id.in_(subject_ids))
+    if subject_id is not None:
+        stmt = stmt.where(Question.subject_id == subject_id)
+    stmt = stmt.group_by(
+        ImportTask.id,
+        ImportTask.original_filename,
+        ImportTask.created_at,
+        ImportTask.scope_type,
+        ImportTask.publication_status,
+        ImportTask.user_id,
+    ).order_by(ImportTask.created_at.desc(), ImportTask.id.desc())
+
+    result = await db.execute(stmt)
+    banks = []
+    for row in result:
+        can_edit = row.user_id == current_user.id or (
+            row.subject_id is not None
+            and can(current_user, Permission.MANAGE_SUBJECT, subject_id=row.subject_id)
+        )
+        banks.append(
+            ManagedQuestionBank(
+                id=row.id,
+                original_filename=row.original_filename,
+                scope=row.scope_type,
+                publication_status=row.publication_status,
+                question_count=row.question_count,
+                published_count=row.published_count,
+                created_at=row.created_at,
+                can_edit=can_edit,
+            )
+        )
+    return banks
+
+
+@router.get("/manage-question-banks/{import_task_id}", response_model=ManagedQuestionBank)
+async def read_managed_question_bank(
+    *,
+    import_task_id: int,
+    subject_id: int,
+    db: deps.SessionDep,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> ManagedQuestionBank:
+    result = await db.execute(
+        select(ImportTask)
+        .join(Question, Question.import_task_id == ImportTask.id)
+        .where(
+            ImportTask.id == import_task_id,
+            Question.subject_id == subject_id,
+            Question.deleted_at.is_(None),
+            visible_questions_filter(current_user),
+        )
+        .limit(1)
+    )
+    task = result.scalars().first()
+    if task is None:
+        raise HTTPException(status_code=404, detail="Question bank not found")
+    can_edit = task.user_id == current_user.id or can(
+        current_user, Permission.MANAGE_SUBJECT, subject_id=subject_id
+    )
+    if task.scope_type == "personal" and task.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Question bank not found")
+    if not can_edit:
+        raise HTTPException(status_code=403, detail="Not allowed to manage this question bank")
+    counts = await db.execute(
+        select(
+            func.count(Question.id),
+            func.count(Question.id).filter(Question.status == QuestionStatus.PUBLISHED.value),
+        ).where(
+            Question.import_task_id == import_task_id,
+            Question.subject_id == subject_id,
+            Question.deleted_at.is_(None),
+        )
+    )
+    question_count, published_count = counts.one()
+    return ManagedQuestionBank(
+        id=task.id,
+        original_filename=task.original_filename,
+        scope=task.scope_type,
+        publication_status=task.publication_status,
+        question_count=question_count,
+        published_count=published_count,
+        created_at=task.created_at,
+        can_edit=can_edit,
+    )
+
+
+@router.post("/question-banks/{import_task_id}/publish", response_model=ManagedQuestionBank)
+async def publish_personal_question_bank(
+    *,
+    import_task_id: int,
+    db: deps.SessionDep,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> ManagedQuestionBank:
+    task_result = await db.execute(
+        select(ImportTask).where(
+            ImportTask.id == import_task_id,
+            ImportTask.scope_type == "personal",
+            ImportTask.user_id == current_user.id,
+        )
+    )
+    task = task_result.scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=404, detail="Personal question bank not found")
+    questions_result = await db.execute(
+        select(Question).where(
+            Question.import_task_id == import_task_id,
+            Question.deleted_at.is_(None),
+        )
+    )
+    questions = questions_result.scalars().all()
+    if not questions:
+        raise HTTPException(status_code=409, detail="Question bank has no questions")
+    for question in questions:
+        if question.answer is None:
+            question.status = QuestionStatus.DRAFT.value
+        else:
+            answer = parse_json_field(question.answer)
+            if isinstance(answer, dict) and answer.get("kind") != "legacy_unresolved":
+                question.status = QuestionStatus.PUBLISHED.value
+    task.publication_status = "published"
+    await db.commit()
+    return ManagedQuestionBank(
+        id=task.id,
+        original_filename=task.original_filename,
+        scope=task.scope_type,
+        publication_status=task.publication_status,
+        question_count=len(questions),
+        published_count=sum(
+            question.status == QuestionStatus.PUBLISHED.value for question in questions
+        ),
+        created_at=task.created_at,
+        can_edit=True,
+    )
+
+
+@router.put("/question-banks/{import_task_id}/scope")
+async def update_question_bank_scope(
+    *,
+    import_task_id: int,
+    db: deps.SessionDep,
+    payload: PracticeQuestionBankScopeUpdate,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> dict[str, str | int]:
+    result = await db.execute(
+        select(ImportTask).where(ImportTask.id == import_task_id)
+    )
+    task = result.scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=404, detail="Question bank not found")
+    subject_result = await db.execute(
+        select(Question.subject_id)
+        .where(
+            Question.import_task_id == import_task_id,
+            Question.subject_id.is_not(None),
+        )
+        .distinct()
+    )
+    subject_ids = subject_result.scalars().all()
+    if not subject_ids:
+        raise HTTPException(status_code=404, detail="Question bank not found")
+    for subject_id in subject_ids:
+        if not can(current_user, Permission.EDIT_QUESTION, subject_id=subject_id):
+            raise HTTPException(status_code=403, detail="Not allowed to move this question bank")
+        if (
+            not current_user.is_superuser
+            and task.user_id != current_user.id
+            and not can(current_user, Permission.MANAGE_SUBJECT, subject_id=subject_id)
+        ):
+            raise HTTPException(status_code=403, detail="Not allowed to move this question bank")
+
+    new_scope = payload.scope
+    if new_scope not in _VALID_SCOPES:
+        raise HTTPException(status_code=422, detail="Unsupported question-bank scope")
+    if task.scope_type != new_scope:
+        questions_result = await db.execute(
+            select(Question).where(Question.import_task_id == import_task_id)
+        )
+        questions = questions_result.scalars().all()
+        if any(question.visibility == "group" for question in questions):
+            raise HTTPException(
+                status_code=409,
+                detail="Question banks containing group-restricted questions cannot be moved",
+            )
+        if new_scope == "personal" and any(
+            question.created_by != task.user_id for question in questions
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Only question banks owned by their original importer can move into a personal space",
+            )
+        for question in questions:
+            question.visibility = (
+                QuestionVisibility.PRIVATE.value
+                if new_scope == "personal"
+                else QuestionVisibility.PUBLIC.value
+            )
+            if new_scope == "shared" and question.status == QuestionStatus.PUBLISHED.value:
+                question.status = QuestionStatus.PENDING.value
+                question.review_count = 0
+            elif (
+                new_scope == "personal"
+                and question.status in {
+                    QuestionStatus.PENDING.value,
+                    QuestionStatus.DRAFT.value,
+                }
+            ):
+                answer = parse_json_field(question.answer)
+                if isinstance(answer, dict) and answer.get("kind") != "legacy_unresolved":
+                    question.status = QuestionStatus.PUBLISHED.value
+        task.scope_type = new_scope
+        task.publication_status = "published" if new_scope == "personal" else "pending"
+        await db.commit()
+    return {"id": task.id, "scope": task.scope_type}
 
 
 def _safe_question(question: Question) -> PracticeQuestion | None:
@@ -36,6 +467,12 @@ def _safe_question(question: Question) -> PracticeQuestion | None:
         q_type=question.q_type,
         options=question.options or [],
         difficulty=question.difficulty or 1,
+        blank_count=(
+            len(answer.get("blanks", []))
+            if answer.get("kind") == "fill_in_the_blank"
+            and isinstance(answer.get("blanks"), list)
+            else 0
+        ),
     )
 
 
@@ -102,23 +539,7 @@ def _grade_answer(question: Question, submitted: Any) -> tuple[bool | None, floa
         is_correct = isinstance(submitted, bool) and submitted is answer.get("correct")
         return is_correct, float(is_correct), False
     if answer_kind == "fill_in_the_blank":
-        blanks = answer.get("blanks") or []
-        if not isinstance(submitted, list) or len(submitted) != len(blanks):
-            return False, 0.0, False
-        matched = 0
-        for value, blank in zip(submitted, blanks):
-            if not isinstance(value, str) or not isinstance(blank, dict):
-                continue
-            match = blank.get("match") or "exact"
-            expected = [
-                _normalize_blank(_rich_text(accepted), match)
-                for accepted in blank.get("accept") or []
-            ]
-            actual = _normalize_blank(value, match)
-            if actual is not None and actual in expected:
-                matched += 1
-        score = matched / len(blanks) if blanks else 0.0
-        return score == 1.0, score, False
+        return None, None, True
     if answer_kind == "free_response":
         return None, None, True
     return None, None, True
@@ -128,25 +549,42 @@ def _grade_answer(question: Question, submitted: Any) -> tuple[bool | None, floa
 async def read_practice_questions(
     db: deps.SessionDep,
     subject_id: int,
+    scope: str,
+    import_task_id: int,
     mode: PracticeMode = "sequential",
     q_type: QuestionType | None = None,
     limit: int = Query(default=20, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> PracticeQuestionSet:
+    if scope not in _VALID_SCOPES:
+        raise HTTPException(status_code=422, detail="Unsupported question-bank scope")
     if mode not in _VALID_MODES:
         raise HTTPException(status_code=422, detail="Unsupported practice mode")
     if mode == "type" and q_type is None:
         raise HTTPException(status_code=422, detail="q_type is required for type practice")
     if mode != "type" and q_type is not None:
         raise HTTPException(status_code=422, detail="q_type is only valid for type practice")
+    await _get_owned_bank(
+        db,
+        import_task_id=import_task_id,
+        subject_id=subject_id,
+        scope=scope,
+        current_user=current_user,
+    )
 
     stmt = select(Question).where(
+        Question.import_task_id == import_task_id,
         Question.subject_id == subject_id,
         Question.status == QuestionStatus.PUBLISHED.value,
         Question.deleted_at.is_(None),
         Question.parent_id.is_(None),
         Question.answer.is_not(None),
+        Question.visibility == (
+            QuestionVisibility.PRIVATE.value
+            if scope == "personal"
+            else QuestionVisibility.PUBLIC.value
+        ),
         visible_questions_filter(current_user),
     )
     if mode == "type" and q_type is not None:
@@ -163,6 +601,9 @@ async def read_practice_questions(
         )
         stmt = stmt.where(Question.id.in_(wrong_questions))
 
+    total_count = await db.scalar(
+        select(func.count()).select_from(stmt.order_by(None).subquery())
+    ) or 0
     if mode == "random":
         stmt = stmt.order_by(
             func.rand() if db.bind and db.bind.dialect.name == "mysql" else func.random()
@@ -204,6 +645,9 @@ async def read_practice_questions(
     return PracticeQuestionSet(
         mode=mode,
         questions=questions[:limit],
+        total_count=(
+            len(questions[:limit]) if mode == "random" else total_count
+        ),
         has_more=has_more and mode != "random",
         next_offset=next_offset,
     )
@@ -219,13 +663,26 @@ async def submit_practice_answer(
     if submission.mode not in _VALID_MODES:
         raise HTTPException(status_code=422, detail="Unsupported practice mode")
 
+    await _get_owned_bank(
+        db,
+        import_task_id=submission.import_task_id,
+        subject_id=submission.subject_id,
+        scope=submission.scope,
+        current_user=current_user,
+    )
     result = await db.execute(
         select(Question).where(
             Question.id == submission.question_id,
             Question.subject_id == submission.subject_id,
+            Question.import_task_id == submission.import_task_id,
             Question.status == QuestionStatus.PUBLISHED.value,
             Question.deleted_at.is_(None),
             Question.parent_id.is_(None),
+            Question.visibility == (
+                QuestionVisibility.PRIVATE.value
+                if submission.scope == "personal"
+                else QuestionVisibility.PUBLIC.value
+            ),
             visible_questions_filter(current_user),
         )
     )
@@ -235,18 +692,96 @@ async def submit_practice_answer(
     if question.answer is None:
         raise HTTPException(status_code=422, detail="Question has no answer")
 
-    if question.q_type == QuestionType.FREE_RESPONSE:
-        if submission.self_assessed is None:
-            raise HTTPException(status_code=422, detail="Self-assessment is required")
-        is_correct: bool | None = submission.self_assessed
-        score: float | None = float(submission.self_assessed)
+    if submission.dont_know:
+        is_correct: bool | None = False
+        score: float | None = 0.0
         requires_self_assessment = True
     else:
         is_correct, score, requires_self_assessment = _grade_answer(
             question, submission.answer
         )
         if requires_self_assessment:
-            raise HTTPException(status_code=422, detail="Answer cannot be graded automatically")
+            if submission.self_assessed is None:
+                raise HTTPException(status_code=422, detail="Self-assessment is required")
+            is_correct = submission.self_assessed
+            score = float(submission.self_assessed)
+
+    if is_correct is False:
+        content = parse_json_field(question.content)
+        correct_answer = parse_json_field(question.answer)
+        analysis_snapshot = parse_json_field(question.analysis)
+        if not isinstance(content, dict) or not isinstance(correct_answer, dict):
+            raise HTTPException(status_code=500, detail="Question content or answer is invalid")
+        original_filename = None
+        if question.import_task_id is not None:
+            task = await db.get(ImportTask, question.import_task_id)
+            if task is not None:
+                original_filename = task.original_filename
+        snapshot = {
+            "content": content,
+            "q_type": question.q_type.value,
+            "options": question.options or [],
+            "answer": correct_answer,
+            "analysis": analysis_snapshot if isinstance(analysis_snapshot, dict) else None,
+        }
+        now = datetime.utcnow()
+        values = {
+            "user_id": current_user.id,
+            "question_id": question.id,
+            "subject_id": question.subject_id,
+            "import_task_id": question.import_task_id,
+            "original_filename": original_filename,
+            "question_snapshot": snapshot,
+            "wrong_count": 1,
+            "first_wrong_at": now,
+            "last_wrong_at": now,
+        }
+        dialect_name = db.bind.dialect.name if db.bind is not None else ""
+        if dialect_name == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as dialect_insert
+
+            statement = dialect_insert(WrongBookEntry).values(**values)
+            statement = statement.on_conflict_do_update(
+                index_elements=["user_id", "question_id"],
+                set_={
+                    "wrong_count": WrongBookEntry.wrong_count + 1,
+                    "last_wrong_at": now,
+                    "question_snapshot": snapshot,
+                    "subject_id": question.subject_id,
+                    "import_task_id": question.import_task_id,
+                    "original_filename": original_filename,
+                },
+            )
+            await db.execute(statement)
+        elif dialect_name == "mysql":
+            from sqlalchemy.dialects.mysql import insert as dialect_insert
+
+            statement = dialect_insert(WrongBookEntry).values(**values)
+            statement = statement.on_duplicate_key_update(
+                wrong_count=WrongBookEntry.wrong_count + 1,
+                last_wrong_at=now,
+                question_snapshot=snapshot,
+                subject_id=question.subject_id,
+                import_task_id=question.import_task_id,
+                original_filename=original_filename,
+            )
+            await db.execute(statement)
+        else:
+            existing_entry = await db.scalar(
+                select(WrongBookEntry).where(
+                    WrongBookEntry.user_id == current_user.id,
+                    WrongBookEntry.question_id == question.id,
+                )
+            )
+            if existing_entry is None:
+                db.add(WrongBookEntry(**values))
+            else:
+                existing_entry.wrong_count += 1
+                existing_entry.last_wrong_at = now
+                existing_entry.question_snapshot = snapshot
+                existing_entry.subject_id = question.subject_id
+                existing_entry.import_task_id = question.import_task_id
+                existing_entry.original_filename = original_filename
 
     db.add(
         PracticeAttempt(
@@ -270,4 +805,5 @@ async def submit_practice_answer(
         requires_self_assessment=requires_self_assessment,
         correct_answer=correct_answer if isinstance(correct_answer, dict) else None,
         analysis=analysis if isinstance(analysis, dict) else None,
+        dont_know=submission.dont_know,
     )

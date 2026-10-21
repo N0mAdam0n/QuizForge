@@ -19,7 +19,8 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import schemas
+from app import crud, schemas
+from app.core.permissions import Permission, can
 from app.models.composition import ScopeType
 from app.models.import_task import (
     CompositionImportState,
@@ -28,6 +29,7 @@ from app.models.import_task import (
 )
 from app.models.question import Question, QuestionStatus, QuestionVisibility
 from app.services import composition_service
+from app.services.activity_logger import log_activity
 from app.services.composition_authoring import AuthoringError, build_nodes
 from app.services.importing.contracts import (
     OUTLINE_ANSWER_SPACE,
@@ -143,6 +145,7 @@ async def preview_paper_import(
     questions: Sequence[Mapping[str, Any]],
     outline: Sequence[Mapping[str, Any]],
     scope_type: ScopeType,
+    question_scope: Optional[ScopeType] = None,
 ) -> PaperImportPreview:
     """纯内存预检:校验题目可建、私有题与共享空间的冲突、结构降级项。"""
     preview = PaperImportPreview(degraded=_collect_degraded(outline))
@@ -159,9 +162,13 @@ async def preview_paper_import(
             continue
         preview.importable_count += 1
 
-    if scope_type is ScopeType.SHARED and _has_private_question(questions):
+    effective_question_scope = question_scope or scope_type
+    if (
+        scope_type is ScopeType.SHARED
+        and (effective_question_scope is ScopeType.PERSONAL or _has_private_question(questions))
+    ):
         preview.blocking_reason = (
-            "本次导入包含私有题，私有题不能加入共享稿件；请改存到个人空间，或先调整题目可见性。"
+            "共享稿件不能引用个人题库中的题目；请将题库与稿件都存入个人空间，或将题库改为共享空间。"
         )
     if preview.importable_count == 0:
         preview.blocking_reason = preview.blocking_reason or "没有任何题目可以导入。"
@@ -252,6 +259,7 @@ async def commit_paper_import(
     actor,
     subject_id: int,
     scope_type: ScopeType,
+    question_scope: Optional[ScopeType] = None,
     owner_id: Optional[int],
     questions: Sequence[Mapping[str, Any]],
     outline: Sequence[Mapping[str, Any]],
@@ -260,7 +268,6 @@ async def commit_paper_import(
     folder_id: Optional[int] = None,
     renumber: bool = False,
     proceed_with_partial: bool = False,
-    default_status: QuestionStatus = QuestionStatus.PENDING,
     filename: Optional[str] = None,
     file_path: Optional[str] = None,
     content_sha256: Optional[str] = None,
@@ -269,6 +276,7 @@ async def commit_paper_import(
     """在单一工作单元内完成建任务、建题、建稿、写 AST。调用方负责 commit。"""
     if not questions:
         raise PaperImportError("没有选中任何题目。")
+    effective_question_scope = question_scope or scope_type
 
     existing = await _find_by_idempotency_key(db, idempotency_key)
     if existing is not None:
@@ -281,9 +289,13 @@ async def commit_paper_import(
                 result.composition_title = comp.title
         return result
 
-    if save_as_composition and scope_type is ScopeType.SHARED and _has_private_question(questions):
+    if (
+        save_as_composition
+        and scope_type is ScopeType.SHARED
+        and (effective_question_scope is ScopeType.PERSONAL or _has_private_question(questions))
+    ):
         raise PaperImportError(
-            "本次导入包含私有题，私有题不能加入共享稿件；请改存到个人空间，或先调整题目可见性。"
+            "共享稿件不能引用个人题库中的题目；请将题库与稿件都存入个人空间，或将题库改为共享空间。"
         )
 
     # 阶段 1：纯内存构造，先把"哪些题能建"定下来。
@@ -294,7 +306,7 @@ async def commit_paper_import(
     for index, raw in enumerate(questions):
         try:
             question_in = _build_question_create(
-                raw, subject_id=subject_id, default_status=default_status, source=filename
+                raw, subject_id=subject_id, default_status=QuestionStatus.DRAFT, source=filename
             )
         except (ValidationError, ValueError) as exc:
             logger.warning("paper import: skip question #%d: %s", index, exc)
@@ -311,6 +323,46 @@ async def commit_paper_import(
             f"有 {len(skipped)} 道题目未能入库。请确认是否仅用已成功的题目继续创建稿件。"
         )
 
+    can_publish_shared = can(
+        actor,
+        Permission.REVIEW_QUESTION,
+        subject_id=subject_id,
+    )
+    required_review_count = 1
+    if effective_question_scope is ScopeType.SHARED and can_publish_shared:
+        subject = await crud.subject.get(db, id=subject_id)
+        if subject is not None:
+            required_review_count = subject.required_review_count or 1
+
+    for _, question_in in plans:
+        question_in.visibility = (
+            QuestionVisibility.PRIVATE
+            if effective_question_scope is ScopeType.PERSONAL
+            else QuestionVisibility.PUBLIC
+        )
+        if question_in.answer is None:
+            question_in.status = QuestionStatus.DRAFT
+        else:
+            if effective_question_scope is ScopeType.PERSONAL:
+                question_in.status = (
+                    QuestionStatus.PENDING
+                    if save_as_composition
+                    else QuestionStatus.PUBLISHED
+                )
+            elif can_publish_shared and required_review_count <= 1:
+                question_in.status = QuestionStatus.PUBLISHED
+            else:
+                question_in.status = QuestionStatus.PENDING
+
+    bank_waits_for_publication = (
+        (effective_question_scope is ScopeType.PERSONAL and save_as_composition)
+        or any(
+            question_in.answer is not None
+            and question_in.status == QuestionStatus.PENDING
+            for _, question_in in plans
+        )
+    )
+
     # 阶段 2：写库。
     import_task = ImportTask(
         user_id=actor.id,
@@ -322,6 +374,8 @@ async def commit_paper_import(
         status=ImportTaskStatus.COMPLETED,
         content_sha256=content_sha256,
         idempotency_key=idempotency_key,
+        scope_type=effective_question_scope.value,
+        publication_status="pending" if bank_waits_for_publication else "published",
         composition_state=CompositionImportState.NOT_REQUESTED,
     )
     db.add(import_task)
@@ -338,6 +392,22 @@ async def commit_paper_import(
         question = await question_service.create_question(
             db=db, question_in=question_in, user_id=actor.id, import_task_id=import_task.id
         )
+        if (
+            effective_question_scope is ScopeType.SHARED
+            and can_publish_shared
+            and question.answer is not None
+        ):
+            question.review_count = 1
+            if required_review_count > 1:
+                question.status = QuestionStatus.PENDING.value
+            await log_activity(
+                db,
+                actor.id,
+                action="review",
+                resource_type="question",
+                resource_id=question.id,
+                details={"action": "approve", "source": "paper_import"},
+            )
         created.append(question)
         if raw.get("temp_id"):
             temp_id_map[str(raw["temp_id"])] = question.id
@@ -357,6 +427,22 @@ async def commit_paper_import(
         question = await question_service.create_question(
             db=db, question_in=question_in, user_id=actor.id, import_task_id=import_task.id
         )
+        if (
+            effective_question_scope is ScopeType.SHARED
+            and can_publish_shared
+            and question.answer is not None
+        ):
+            question.review_count = 1
+            if required_review_count > 1:
+                question.status = QuestionStatus.PENDING.value
+            await log_activity(
+                db,
+                actor.id,
+                action="review",
+                resource_type="question",
+                resource_id=question.id,
+                details={"action": "approve", "source": "paper_import"},
+            )
         created.append(question)
         if raw.get("temp_id"):
             temp_id_map[str(raw["temp_id"])] = question.id

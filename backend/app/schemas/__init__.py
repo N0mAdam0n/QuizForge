@@ -30,6 +30,10 @@ from .composition import (
 from .practice import (
     PracticeAnswerResult,
     PracticeAnswerSubmit,
+    PracticeQuestionBank,
+    PracticeQuestionBankScopeUpdate,
+    ManagedQuestionBank,
     PracticeQuestion,
     PracticeQuestionSet,
+    WrongBookQuestion,
 )

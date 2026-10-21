@@ -4,11 +4,10 @@
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.question import QuestionStatus
 from app.services.importing.contracts import OUTLINE_KINDS
 
 
@@ -52,7 +51,8 @@ class PaperImportQuestion(BaseModel):
 
 
 class PaperImportPreviewRequest(BaseModel):
-    scope: str
+    scope: Literal["personal", "shared"]
+    question_scope: Optional[Literal["personal", "shared"]] = None
     questions: List[PaperImportQuestion] = Field(default_factory=list)
     outline: List[PaperOutlineItemInput] = Field(default_factory=list)
 
@@ -76,7 +76,8 @@ class PaperImportPreviewResponse(BaseModel):
 
 
 class PaperImportCommitRequest(BaseModel):
-    scope: str
+    scope: Literal["personal", "shared"]
+    question_scope: Optional[Literal["personal", "shared"]] = None
     questions: List[PaperImportQuestion] = Field(default_factory=list)
     outline: List[PaperOutlineItemInput] = Field(default_factory=list)
     save_as_composition: bool = False
@@ -84,7 +85,6 @@ class PaperImportCommitRequest(BaseModel):
     folder_id: Optional[int] = None
     renumber: bool = False
     proceed_with_partial: bool = False
-    status: QuestionStatus = QuestionStatus.PENDING
     filename: Optional[str] = None
     file_path: Optional[str] = None
     content_sha256: Optional[str] = None

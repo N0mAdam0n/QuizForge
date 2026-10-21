@@ -4,6 +4,7 @@ import logging
 import shutil
 import uuid
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -59,7 +60,7 @@ class MarkdownContentRequest(BaseModel):
     content: str
     filename: str = None
     mode: str = "extract"
-    method: str = "ai"
+    method: Literal["auto", "ai", "structured"] = "auto"
     subject_id: int = None
 
 @router.post("/docx")
@@ -67,7 +68,7 @@ async def upload_docx(
     db: deps.SessionDep,
     file: UploadFile = File(...),
     mode: str = "extract",
-    method: str = "ai",
+    method: Literal["auto", "ai", "structured"] = "auto",
     subject_id: int = None,
 ):
     """Upload and process a DOCX file."""
@@ -106,7 +107,7 @@ async def upload_markdown(
     db: deps.SessionDep,
     file: UploadFile = File(None),
     mode: str = "extract",
-    method: str = "ai",
+    method: Literal["auto", "ai", "structured"] = "auto",
     subject_id: int = None,
 ):
     """Process markdown content from file upload."""
@@ -170,7 +171,7 @@ async def upload_markdown_archive(
     db: deps.SessionDep,
     file: UploadFile = File(...),
     mode: str = "extract",
-    method: str = "ai",
+    method: Literal["auto", "ai", "structured"] = "auto",
     subject_id: int = None,
 ):
     """Process a zip archive containing markdown file(s) plus their local images."""

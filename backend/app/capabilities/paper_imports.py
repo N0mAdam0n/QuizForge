@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from app import crud
 from app.core.permissions import Permission
 from app.models.composition import ScopeType
-from app.models.question import QuestionStatus
 from app.schemas.paper_import import (
     PaperImportCommitResponse,
     PaperImportPreviewResponse,
@@ -34,11 +33,13 @@ class PaperImportScopeInput(BaseModel):
 
 
 class PaperImportPreviewInput(PaperImportScopeInput):
+    question_scope: Optional[ScopeType] = None
     questions: List[Dict[str, Any]] = Field(default_factory=list)
     outline: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class PaperImportCommitInput(PaperImportScopeInput):
+    question_scope: Optional[ScopeType] = None
     questions: List[Dict[str, Any]] = Field(default_factory=list)
     outline: List[Dict[str, Any]] = Field(default_factory=list)
     save_as_composition: bool = False
@@ -46,7 +47,6 @@ class PaperImportCommitInput(PaperImportScopeInput):
     folder_id: Optional[int] = None
     renumber: bool = False
     proceed_with_partial: bool = False
-    status: QuestionStatus = QuestionStatus.PENDING
     filename: Optional[str] = None
     file_path: Optional[str] = None
     content_sha256: Optional[str] = None
@@ -81,6 +81,7 @@ class PreviewPaperImport(Capability[PaperImportPreviewInput, PaperImportPreviewR
             questions=inp.questions,
             outline=inp.outline,
             scope_type=inp.scope_type,
+            question_scope=inp.question_scope,
         )
         return PaperImportPreviewResponse(
             importable_count=preview.importable_count,
@@ -115,6 +116,7 @@ class CommitPaperImport(Capability[PaperImportCommitInput, PaperImportCommitResp
                 actor=ctx.actor,
                 subject_id=inp.subject_id,
                 scope_type=inp.scope_type,
+                question_scope=inp.question_scope,
                 owner_id=inp.owner_id,
                 questions=inp.questions,
                 outline=inp.outline,
@@ -123,7 +125,6 @@ class CommitPaperImport(Capability[PaperImportCommitInput, PaperImportCommitResp
                 folder_id=inp.folder_id,
                 renumber=inp.renumber,
                 proceed_with_partial=inp.proceed_with_partial,
-                default_status=inp.status,
                 filename=inp.filename,
                 file_path=inp.file_path,
                 content_sha256=inp.content_sha256,

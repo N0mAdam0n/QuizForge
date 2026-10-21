@@ -22,7 +22,7 @@ const COMPOSITION_SCOPES = new Set(['shared', 'personal'])
 
 // Keys must match PAGE_KEYS in backend/app/ai/tools/client.py exactly.
 const PAGE_ROUTES: Record<string, string> = {
-    question_library: '/questions',
+    question_library: '/question-banks',
     knowledge_points: '/knowledge-points',
     subjects: '/subjects',
     tags: '/tags',

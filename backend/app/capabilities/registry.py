@@ -20,7 +20,6 @@ _REGISTRY: dict[str, Capability] = {}
 UNGATED_ALLOWLIST: frozenset[str] = frozenset(
     {
         "question.batch_create",
-        "question.review",
         "question.batch_confirm",
     }
 )

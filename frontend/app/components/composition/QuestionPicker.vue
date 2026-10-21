@@ -193,7 +193,7 @@ function confirmInsert() {
         <DialogTitle class="flex items-center justify-between gap-2 pr-6">
           <span>插入题目</span>
           <NuxtLink
-            to="/questions"
+            to="/question-banks"
             target="_blank"
             class="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-primary"
           >

@@ -60,7 +60,7 @@ describe('useAiClientTools.open_page', () => {
     it('navigates to the route for a known page key', async () => {
         const res = await useAiClientTools().run('open_page', { page: 'question_library' })
         expect(res.ok).toBe(true)
-        expect(navigateTo).toHaveBeenCalledWith('/questions')
+        expect(navigateTo).toHaveBeenCalledWith('/question-banks')
     })
 
     it('rejects an unknown page key', async () => {

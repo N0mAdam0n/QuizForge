@@ -633,7 +633,7 @@ const getResultCount = (summaryJson?: string) => {
                                     <!-- Actions for Completed -->
                                     <Button v-if="task.status === 'completed'" 
                                         variant="ghost" size="icon" as-child title="查看题目">
-                                        <NuxtLink :to="`/questions?import_task_id=${task.id}`">
+                                        <NuxtLink :to="`/question-banks/${task.id}`">
                                             <ExternalLink class="h-4 w-4 text-green-600" />
                                         </NuxtLink>
                                     </Button>
