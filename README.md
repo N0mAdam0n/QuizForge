@@ -2,8 +2,6 @@
 
 **QuestionBank** 是面向教师与教研团队的 AI 原生题库与组稿系统，覆盖 AI 智能导入、多学科题库管理、知识点匹配、审核发布与稿件编排。支持 Windows 桌面版和服务器版，既可个人使用，也可在局域网或团队环境中协作。
 
-![题库示例](./docs/public/examples/questions.png)
-![组稿示例](./docs/public/examples/compositions.png)
 
 ## 🧰 技术栈
 
