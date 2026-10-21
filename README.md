@@ -5,6 +5,17 @@
 ![题库示例](./docs/public/examples/questions.png)
 ![组稿示例](./docs/public/examples/compositions.png)
 
+## 🧰 技术栈
+
+| 层次 | 技术 |
+| ------ | ------ |
+| 后端 API | Python 3.13+、FastAPI、Pydantic、SQLAlchemy Async、Alembic |
+| Web 前端 | Nuxt 4（SPA）、Vue 3、TypeScript、Tailwind CSS 4、Shadcn UI |
+| 数据存储 | 桌面版默认使用 SQLite；服务器版使用 MySQL 8。向量检索由 ChromaDB 提供 |
+| AI 能力 | 统一 AI Provider 接口，支持 Google Gemini（`google-genai`）与 OpenAI；配置按数据库动态管理 |
+| 文档与公式 | Pandoc 文档转换，支持 Word / Markdown 导入；Tiptap、KaTeX 与 MathLive 提供富文本和数学公式编辑 |
+| 桌面与部署 | PyInstaller 单文件桌面程序、系统托盘、pywebview；Docker Compose 支持服务器部署 |
+
 ## ✨ 核心功能
 
 | 模块 | 说明 |
@@ -61,10 +72,6 @@ just package-to-output
     <td align="center">
       <img src="./docs/public/qrcode_for_gh_ef2f2e31e4f8_258.jpg" alt="微信公众号二维码" width="180" /><br />
       关注公众号，反馈&获取动态
-    </td>
-    <td align="center">
-      <img src="./docs/public/qr_tip.png" alt="赞赏二维码" width="180" /><br />
-      激励作者☕，让项目变得更好
     </td>
   </tr>
 </table>
