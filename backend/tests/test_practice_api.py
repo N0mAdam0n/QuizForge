@@ -152,6 +152,119 @@ async def test_practice_questions_hide_answers_and_exclude_unpublished(
     assert next_page.json()["has_more"] is False
 
 
+async def test_random_practice_returns_selected_count_or_all_questions(
+    client, db_session, practice_context
+):
+    ctx = practice_context
+    bank = await _seed_bank(db_session, ctx["user"])
+    questions = [
+        await _seed_question(
+            db_session,
+            subject=ctx["subject"],
+            user=ctx["user"],
+            answer={"kind": "single_choice", "correct": "a"},
+            import_task=bank,
+        )
+        for _ in range(3)
+    ]
+
+    response = await client.get(
+        f"{API}/questions",
+        params={
+            "subject_id": ctx["subject"].id,
+            "scope": "shared",
+            "import_task_id": bank.id,
+            "mode": "random",
+            "random_count": "all",
+        },
+        headers=_auth(ctx["user"]),
+    )
+
+    assert response.status_code == 200, response.text
+    assert {item["id"] for item in response.json()["questions"]} == {
+        question.id for question in questions
+    }
+    assert response.json()["total_count"] == 3
+    assert response.json()["has_more"] is False
+    assert all("answer" not in item for item in response.json()["questions"])
+
+
+async def test_range_practice_uses_inclusive_bank_question_numbers_and_paginates(
+    client, db_session, practice_context
+):
+    ctx = practice_context
+    bank = await _seed_bank(db_session, ctx["user"])
+    questions = [
+        await _seed_question(
+            db_session,
+            subject=ctx["subject"],
+            user=ctx["user"],
+            answer={"kind": "single_choice", "correct": "a"},
+            import_task=bank,
+        )
+        for _ in range(5)
+    ]
+    params = {
+        "subject_id": ctx["subject"].id,
+        "scope": "shared",
+        "import_task_id": bank.id,
+        "mode": "range",
+        "start_number": 2,
+        "end_number": 4,
+        "limit": 2,
+    }
+
+    first_page = await client.get(
+        f"{API}/questions",
+        params=params,
+        headers=_auth(ctx["user"]),
+    )
+    assert first_page.status_code == 200, first_page.text
+    assert [item["id"] for item in first_page.json()["questions"]] == [
+        questions[1].id,
+        questions[2].id,
+    ]
+    assert first_page.json()["total_count"] == 3
+    assert first_page.json()["has_more"] is True
+
+    second_page = await client.get(
+        f"{API}/questions",
+        params={**params, "offset": first_page.json()["next_offset"]},
+        headers=_auth(ctx["user"]),
+    )
+    assert [item["id"] for item in second_page.json()["questions"]] == [
+        questions[3].id
+    ]
+    assert second_page.json()["has_more"] is False
+
+
+async def test_range_practice_rejects_missing_or_reversed_bounds(
+    client, practice_context, db_session
+):
+    ctx = practice_context
+    bank = await _seed_bank(db_session, ctx["user"])
+    base_params = {
+        "subject_id": ctx["subject"].id,
+        "scope": "shared",
+        "import_task_id": bank.id,
+        "mode": "range",
+    }
+
+    missing = await client.get(
+        f"{API}/questions",
+        params=base_params,
+        headers=_auth(ctx["user"]),
+    )
+    reversed_bounds = await client.get(
+        f"{API}/questions",
+        params={**base_params, "start_number": 4, "end_number": 2},
+        headers=_auth(ctx["user"]),
+    )
+
+    assert missing.status_code == 422
+    assert reversed_bounds.status_code == 422
+
+
 async def test_wrong_practice_is_scoped_to_the_answering_user(
     client, db_session, practice_context
 ):

@@ -28,8 +28,9 @@ from app.schemas.practice import (
 from app.services.question_content import parse_json_field
 
 router = APIRouter()
-_VALID_MODES = {"sequential", "random", "type", "wrong"}
+_VALID_MODES = {"sequential", "random", "type", "wrong", "range"}
 _VALID_SCOPES = {"personal", "shared"}
+_RANDOM_COUNTS = {"20", "40", "60", "80", "100", "all"}
 
 
 async def _get_owned_bank(
@@ -555,6 +556,9 @@ async def read_practice_questions(
     q_type: QuestionType | None = None,
     limit: int = Query(default=20, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
+    random_count: str = "20",
+    start_number: int | None = Query(default=None, ge=1),
+    end_number: int | None = Query(default=None, ge=1),
     current_user: User = Depends(deps.get_current_active_user),
 ) -> PracticeQuestionSet:
     if scope not in _VALID_SCOPES:
@@ -565,6 +569,29 @@ async def read_practice_questions(
         raise HTTPException(status_code=422, detail="q_type is required for type practice")
     if mode != "type" and q_type is not None:
         raise HTTPException(status_code=422, detail="q_type is only valid for type practice")
+    if mode == "random" and random_count not in _RANDOM_COUNTS:
+        raise HTTPException(status_code=422, detail="Unsupported random question count")
+    if mode != "random" and random_count != "20":
+        raise HTTPException(
+            status_code=422,
+            detail="random_count is only valid for random practice",
+        )
+    if mode == "range":
+        if start_number is None or end_number is None:
+            raise HTTPException(
+                status_code=422,
+                detail="start_number and end_number are required for range practice",
+            )
+        if start_number > end_number:
+            raise HTTPException(
+                status_code=422,
+                detail="start_number must not exceed end_number",
+            )
+    elif start_number is not None or end_number is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="start_number and end_number are only valid for range practice",
+        )
     await _get_owned_bank(
         db,
         import_task_id=import_task_id,
@@ -604,6 +631,11 @@ async def read_practice_questions(
     total_count = await db.scalar(
         select(func.count()).select_from(stmt.order_by(None).subquery())
     ) or 0
+    range_offset = 0
+    if mode == "range":
+        range_offset = start_number - 1
+        total_count = max(min(end_number, total_count) - range_offset, 0)
+
     if mode == "random":
         stmt = stmt.order_by(
             func.rand() if db.bind and db.bind.dialect.name == "mysql" else func.random()
@@ -614,17 +646,25 @@ async def read_practice_questions(
     has_more = False
     next_offset = offset
     if mode == "random":
-        rows = (await db.execute(stmt.limit(limit + 1))).scalars().all()
+        requested_count = (
+            total_count if random_count == "all" else int(random_count)
+        )
+        rows = (await db.execute(stmt.limit(requested_count + 1))).scalars().all()
         for row in rows:
             safe = _safe_question(row)
             if safe is not None:
                 questions.append(safe)
-            if len(questions) > limit:
+            if len(questions) > requested_count:
                 break
     else:
+        query_offset = offset + range_offset
         while len(questions) <= limit:
+            remaining_count = total_count - next_offset
+            if remaining_count <= 0:
+                break
+            query_limit = min(limit + 1, remaining_count)
             rows = (
-                await db.execute(stmt.limit(limit + 1).offset(next_offset))
+                await db.execute(stmt.limit(query_limit).offset(query_offset))
             ).scalars().all()
             if not rows:
                 break
@@ -641,12 +681,14 @@ async def read_practice_questions(
                 if not has_more:
                     next_offset += len(rows)
                 break
-            next_offset += len(rows)
+            query_offset += len(rows)
     return PracticeQuestionSet(
         mode=mode,
-        questions=questions[:limit],
+        questions=questions if mode == "random" else questions[:limit],
         total_count=(
-            len(questions[:limit]) if mode == "random" else total_count
+            len(questions[:requested_count])
+            if mode == "random"
+            else total_count
         ),
         has_more=has_more and mode != "random",
         next_offset=next_offset,

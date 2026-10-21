@@ -6,7 +6,7 @@ from datetime import datetime
 from app.models.question import QuestionType
 
 
-PracticeMode = Literal["sequential", "random", "type", "wrong"]
+PracticeMode = Literal["sequential", "random", "type", "wrong", "range"]
 PracticeScope = Literal["personal", "shared"]
 
 

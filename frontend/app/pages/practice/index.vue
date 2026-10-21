@@ -17,7 +17,7 @@ import { collectBlankIds } from '@/components/rich-editor/richDoc'
 
 definePageMeta({ layout: 'default' })
 
-type PracticeMode = 'sequential' | 'random' | 'type' | 'wrong'
+type PracticeMode = 'sequential' | 'random' | 'type' | 'wrong' | 'range'
 type PracticeScope = 'personal' | 'shared'
 
 interface PracticeQuestionBank {
@@ -64,6 +64,9 @@ const banksLoading = ref(false)
 const banksError = ref<string | null>(null)
 const mode = ref<PracticeMode>('sequential')
 const selectedType = ref<QuestionType>('single_choice')
+const randomCount = ref('20')
+const rangeStart = ref(1)
+const rangeEnd = ref(20)
 const autoAdvanceCorrect = useCookie<boolean>('practice-auto-advance-correct', {
   default: () => false,
 })
@@ -117,6 +120,7 @@ const modeLabels: Record<PracticeMode, string> = {
   random: '乱序刷题',
   type: '按题型刷题',
   wrong: '错题练习',
+  range: '区间刷题',
 }
 const typeLabels: Record<QuestionType, string> = {
   single_choice: '单选题',
@@ -167,6 +171,10 @@ const startPractice = async () => {
     toast.error('请先选择学科')
     return
   }
+  if (mode.value === 'range' && (!rangeStart.value || !rangeEnd.value || rangeStart.value > rangeEnd.value)) {
+    toast.error('请输入有效的题号区间')
+    return
+  }
   loading.value = true
   error.value = null
   questionOffset.value = 0
@@ -183,6 +191,11 @@ const startPractice = async () => {
       offset: questionOffset.value,
     }
     if (mode.value === 'type') query.q_type = selectedType.value
+    if (mode.value === 'random') query.random_count = randomCount.value
+    if (mode.value === 'range') {
+      query.start_number = rangeStart.value
+      query.end_number = rangeEnd.value
+    }
     questionSet.value = await $api<PracticeQuestionSet>('/practice/questions', { query })
     questionIndex.value = 0
     if (questionSet.value.questions.length === 0) {
@@ -543,9 +556,10 @@ await loadBanks()
           <Button
             v-for="option in ([
               { value: 'sequential', label: '顺序刷题', icon: ArrowRight, description: '按题目顺序练习' },
-              { value: 'random', label: '乱序刷题', icon: Shuffle, description: '随机抽取并打乱顺序' },
+              { value: 'random', label: '乱序刷题', icon: Shuffle, description: '随机抽取指定数量或整库练习' },
               { value: 'type', label: '按题型刷题', icon: CircleHelp, description: '选择题型集中练习' },
               { value: 'wrong', label: '错题练习', icon: RotateCcw, description: '重练自己答错过的题目' },
+              { value: 'range', label: '区间刷题', icon: ArrowRight, description: '按题库顺序练习指定题号范围' },
             ] as const)"
             :key="option.value"
             type="button"
@@ -573,9 +587,42 @@ await loadBanks()
           </select>
         </div>
 
+        <div v-else-if="mode === 'random'" class="max-w-sm space-y-2">
+          <Label for="practice-random-count">乱序题目数量</Label>
+          <select
+            id="practice-random-count"
+            v-model="randomCount"
+            class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="20">20 题</option>
+            <option value="40">40 题</option>
+            <option value="60">60 题</option>
+            <option value="80">80 题</option>
+            <option value="100">100 题</option>
+            <option value="all">全部题目</option>
+          </select>
+        </div>
+
+        <div v-else-if="mode === 'range'" class="max-w-xl space-y-2">
+          <Label>题号区间</Label>
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="min-w-32 flex-1 space-y-1">
+              <Label for="practice-range-start" class="text-xs text-muted-foreground">从第几题开始</Label>
+              <Input id="practice-range-start" v-model.number="rangeStart" type="number" min="1" step="1" />
+            </div>
+            <span class="pt-5 text-muted-foreground">至</span>
+            <div class="min-w-32 flex-1 space-y-1">
+              <Label for="practice-range-end" class="text-xs text-muted-foreground">到第几题结束</Label>
+              <Input id="practice-range-end" v-model.number="rangeEnd" type="number" min="1" step="1" />
+            </div>
+          </div>
+          <p class="text-xs text-muted-foreground">题号按当前题库中可练习题目的顺序计算，起止题号均包含在内。</p>
+          <p v-if="rangeStart < 1 || rangeEnd < rangeStart" class="text-sm text-destructive">结束题号需大于或等于开始题号。</p>
+        </div>
+
         <div class="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <Badge variant="secondary">{{ modeLabels[mode] }}</Badge>
-          <Button :disabled="loading || !currentSubjectId || !selectedBankId" @click="startPractice">
+          <Button :disabled="loading || !currentSubjectId || !selectedBankId || (mode === 'range' && (rangeStart < 1 || rangeEnd < rangeStart))" @click="startPractice">
             {{ loading ? '正在选题…' : '开始练习' }}
           </Button>
         </div>
