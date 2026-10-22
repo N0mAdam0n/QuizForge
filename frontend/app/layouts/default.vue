@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { SidebarProvider, SidebarInset } from '~/components/ui/sidebar'
+import { SidebarProvider, SidebarInset, SidebarTrigger } from '~/components/ui/sidebar'
 import AppSidebar from '~/components/AppSidebar.vue'
 import FloatingChatWidget from '~/components/chat/FloatingChatWidget.vue'
 import { toast } from 'vue-sonner'
-import { useLocalStorage, useSessionStorage } from '@vueuse/core'
+import { useLocalStorage, useMediaQuery, useSessionStorage } from '@vueuse/core'
 
 const { fetchUser, token, user } = useAuth()
 const { hasSubjects } = useSubjectContext()
 const { state: updateState, check: checkUpdate } = useUpdateCheck()
 const ignoredVersion = useLocalStorage('ignored-update-version', '')
 const hasPrompted = useSessionStorage('update-prompted', false)
+const isMobile = useMediaQuery('(max-width: 768px)')
 
 // 普通用户未被分配任何学科时的空状态提示(管理员不受限)。
 const showNoSubjectHint = computed(
@@ -63,6 +64,9 @@ onMounted(async () => {
   <SidebarProvider>
     <AppSidebar />
     <SidebarInset>
+      <header v-if="isMobile" class="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+        <SidebarTrigger aria-label="打开导航菜单" />
+      </header>
       <div
         v-if="showNoSubjectHint"
         class="m-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"

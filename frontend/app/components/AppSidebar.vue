@@ -27,12 +27,14 @@ import UserProfileDialog from '~/components/UserProfileDialog.vue'
 import ChangePasswordDialog from '~/components/ChangePasswordDialog.vue'
 import { useColorMode } from '@vueuse/core'
 import { BookOpen, ChevronsUpDown, ListTree, LogOut, Settings, Sparkles, User, Users, Tags, Library, HelpCircle, KeyRound, Activity, Layers, Info, Moon, Sun, Bot, Lock, Dumbbell, ClipboardList } from '@lucide/vue'
+import { useSidebar } from '@/components/ui/sidebar'
 
 const props = withDefaults(defineProps<SidebarProps>(), {
   collapsible: "icon",
 })
 
 const route = useRoute()
+const { isMobile, setOpenMobile } = useSidebar()
 const { user, logout } = useAuth()
 const { isAdmin, isManagerSomewhere } = usePermissions()
 const router = useRouter()
@@ -48,6 +50,10 @@ const handleLogout = () => {
   logout()
   router.push('/login')
 }
+
+watch(() => route.fullPath, () => {
+  if (isMobile.value) setOpenMobile(false)
+})
 
 // 左侧彩色条 + 主题色高亮当前导航项，不修改 ui/sidebar 原始组件
 const navActiveClass = 'border-l-2 border-transparent data-[active=true]:border-l-primary data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:font-medium group-data-[collapsible=icon]:border-l-0'
