@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import uuid
+from dataclasses import asdict, dataclass
 from typing import Optional, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +24,17 @@ from .prompt import PromptBuilder
 from .provider_config import resolve_active_provider
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ScoreDetails:
+    per_question: list[float]
+    quality: float
+    coverage: float
+    raw_coverage: float
+    expected_count: int
+    extracted_count: int
+    combined: float
 
 
 class ExtractionStrategy(Protocol):
@@ -177,8 +190,9 @@ class MultiStrategyExtractor:
         mode: str = "extract",
         subject_id: Optional[int] = None,
     ) -> ExtractionResult:
+        started = time.perf_counter()
         if mode != "extract" or image_data:
-            return await self.ai_extractor.extract(
+            result = await self.ai_extractor.extract(
                 content,
                 db,
                 image_data=image_data,
@@ -186,6 +200,21 @@ class MultiStrategyExtractor:
                 mode=mode,
                 subject_id=subject_id,
             )
+            try:
+                details = self._score_details(result, content)
+            except Exception:
+                logger.warning("Could not calculate AI extraction diagnostics", exc_info=True)
+                return result
+            result.diagnostics = {
+                "local_details": None,
+                "ai_details": asdict(details),
+                "ai_called": True,
+                "chosen_strategy": "ai",
+                "threshold": self.confidence_threshold,
+                "latency_ms": min(int((time.perf_counter() - started) * 1000), 600_000),
+                "questions": result.questions,
+            }
+            return result
 
         local_result = await self.local_extractor.extract(
             content,
@@ -194,8 +223,18 @@ class MultiStrategyExtractor:
             mode=mode,
             subject_id=subject_id,
         )
-        local_score = self._score(local_result, content)
+        local_details = self._score_details(local_result, content)
+        local_score = local_details.combined
         if local_score >= self.confidence_threshold:
+            local_result.diagnostics = {
+                "local_details": asdict(local_details),
+                "ai_details": None,
+                "ai_called": False,
+                "chosen_strategy": "rule",
+                "threshold": self.confidence_threshold,
+                "latency_ms": min(int((time.perf_counter() - started) * 1000), 600_000),
+                "questions": local_result.questions,
+            }
             return local_result
 
         ai_result = await self.ai_extractor.extract(
@@ -205,13 +244,28 @@ class MultiStrategyExtractor:
             mode=mode,
             subject_id=subject_id,
         )
-        return ai_result if self._score(ai_result, content) > local_score else local_result
+        ai_details = self._score_details(ai_result, content)
+        chosen_result = ai_result if ai_details.combined > local_score else local_result
+        chosen_result.diagnostics = {
+            "local_details": asdict(local_details),
+            "ai_details": asdict(ai_details),
+            "ai_called": True,
+            "chosen_strategy": "ai" if chosen_result is ai_result else "rule",
+            "threshold": self.confidence_threshold,
+            "latency_ms": min(int((time.perf_counter() - started) * 1000), 600_000),
+            "questions": chosen_result.questions,
+        }
+        return chosen_result
 
     @classmethod
     def _score(cls, result: ExtractionResult, content: str) -> float:
+        return cls._score_details(result, content).combined
+
+    @classmethod
+    def _score_details(cls, result: ExtractionResult, content: str) -> ScoreDetails:
         questions = result.questions
         if not questions:
-            return 0.0
+            return ScoreDetails([], 0.0, 0.0, 0.0, 0, 0, 0.0)
 
         question_scores: list[float] = []
         for question in questions:
@@ -236,5 +290,14 @@ class MultiStrategyExtractor:
             len(cls._QUESTION_BOUNDARY_RE.findall(content)),
             len(cls._TAG_BOUNDARY_RE.findall(content)),
         )
-        coverage = min(len(questions) / expected_count, 1.0) if expected_count else 1.0
-        return quality * 0.65 + coverage * 0.35
+        raw_coverage = len(questions) / expected_count if expected_count else 1.0
+        coverage = min(raw_coverage, 1.0)
+        return ScoreDetails(
+            per_question=question_scores,
+            quality=quality,
+            coverage=coverage,
+            raw_coverage=raw_coverage,
+            expected_count=expected_count,
+            extracted_count=len(questions),
+            combined=quality * 0.65 + coverage * 0.35,
+        )

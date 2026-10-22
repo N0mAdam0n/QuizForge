@@ -55,6 +55,7 @@ interface PracticeAnswerResult {
 }
 
 const { $api } = useNuxtApp()
+const telemetryConsent = useState<boolean>('telemetry-consent', () => false)
 const { currentSubjectId, currentSubject, subjects, init: initSubject } = useSubjectContext()
 
 const practiceScope = ref<PracticeScope>('personal')
@@ -130,6 +131,18 @@ const typeLabels: Record<QuestionType, string> = {
   free_response: '解答题',
 }
 let autoAdvanceTimer: ReturnType<typeof setTimeout> | null = null
+let questionStartedAt = Date.now()
+const practiceSessionId = ref<string | null>(null)
+
+const newPracticeSessionId = () => {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  const bytes = new Uint8Array(16)
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes)
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
 const clearAutoAdvanceTimer = () => {
   if (autoAdvanceTimer !== null) {
@@ -164,6 +177,7 @@ watch(currentQuestion, (question, previousQuestion) => {
     }
   }
   resetAnswer(question)
+  questionStartedAt = Date.now()
 }, { immediate: true })
 
 const startPractice = async () => {
@@ -181,6 +195,7 @@ const startPractice = async () => {
   clearAutoAdvanceTimer()
   practiceSubjectId.value = currentSubjectId.value
   practiceBankId.value = selectedBankId.value
+  practiceSessionId.value = newPracticeSessionId()
   try {
     const query: Record<string, string | number> = {
       subject_id: practiceSubjectId.value,
@@ -281,8 +296,15 @@ const submitAnswer = async (dontKnow = false) => {
           ? selfAssessed.value
           : null,
         dont_know: dontKnow,
+        ...(telemetryConsent.value
+          ? {
+              time_ms: Math.min(Math.max(Date.now() - questionStartedAt, 0), 3_600_000),
+              session_id: practiceSessionId.value,
+            }
+          : {}),
       },
     })
+    questionStartedAt = Date.now()
     submittedAnswers.value[question.id] = answer
     answerResults.value[question.id] = result
     if (result.is_correct === true && autoAdvanceCorrect.value) {

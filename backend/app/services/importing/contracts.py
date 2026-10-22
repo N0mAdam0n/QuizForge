@@ -106,6 +106,7 @@ class ExtractionResult:
 
     questions: List[dict] = field(default_factory=list)
     paper: Optional[PaperExtraction] = None
+    diagnostics: Optional[dict[str, Any]] = None
 
 
 @dataclass

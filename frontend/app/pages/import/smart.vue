@@ -71,6 +71,8 @@ const isUploading = ref(false)
 const isImporting = ref(false)
 const error = ref<string | null>(null)
 const importList = ref<ImportDraft[]>([])
+const baselineImportItems = ref<Record<string, ImportDraft>>({})
+const baselineQuestionIndices = ref<Record<string, number>>({})
 const editingItemId = ref<string | null>(null)
 const importedTaskId = ref<number | null>(null)
 const uploadedFilePath = ref<string | null>(null)
@@ -291,6 +293,13 @@ const acceptExtraction = (data: any) => {
         return
     }
     importList.value = drafts
+    baselineImportItems.value = {}
+    baselineQuestionIndices.value = {}
+    drafts.forEach((draft, index) => {
+        if (!draft.temp_id) return
+        baselineImportItems.value[draft.temp_id] = JSON.parse(JSON.stringify(draft))
+        baselineQuestionIndices.value[draft.temp_id] = index
+    })
     paper.value = data.paper ?? null
     contentSha256.value = data.content_sha256 ?? null
     duplicateOf.value = data.duplicate_of ?? null
@@ -456,6 +465,48 @@ const handleImport = async (proceedWithPartial = false) => {
             }
         })
 
+        const reviewChanges = selectedItems.flatMap((item) => {
+            if (!item.temp_id) return []
+            const original = baselineImportItems.value[item.temp_id]
+            const fields: string[] = []
+            if (!original) {
+                fields.push('other')
+            } else {
+                const equal = (left: unknown, right: unknown) =>
+                    JSON.stringify(left ?? null) === JSON.stringify(right ?? null)
+                if (!equal(item.content, original.content)) fields.push('content')
+                if (!equal(item.options, original.options)) fields.push('options')
+                if (!equal(item.answer, original.answer)) fields.push('answer')
+                if (!equal(item.analysis, original.analysis)) fields.push('analysis')
+                if (item.q_type !== original.q_type) fields.push('q_type')
+                if (item.difficulty !== original.difficulty) fields.push('difficulty')
+                if (
+                    !equal(item.tag_ids, original.tag_ids)
+                    || !equal(item.knowledge_point_ids, original.knowledge_point_ids)
+                ) fields.push('tags')
+                if (
+                    !equal(item.thinking, original.thinking)
+                    || !equal(item.summary, original.summary)
+                ) fields.push('other')
+            }
+            const editCategory = fields.includes('answer')
+                ? 'answer_fix'
+                : fields.includes('options')
+                  ? 'option_fix'
+                  : fields.includes('q_type')
+                    ? 'type_fix'
+                    : fields.includes('content') || fields.includes('analysis')
+                      ? 'format'
+                      : 'other'
+            return [{
+                temp_id: item.temp_id,
+                question_index: baselineQuestionIndices.value[item.temp_id],
+                fields_changed: [...new Set(fields)].slice(0, 8),
+                edit_category: editCategory,
+                accepted_unchanged: fields.length === 0,
+            }]
+        })
+
         // 幂等键绑定本次提交：网络重试不会重复建题建稿。
         idempotencyKey.value ||= generateTempId()
 
@@ -463,6 +514,7 @@ const handleImport = async (proceedWithPartial = false) => {
             scope: compositionScope.value,
             question_scope: questionScope.value,
             questions: payloadQuestions,
+            review_changes: reviewChanges,
             outline: buildSubmitOutline(paper.value, selectedItems),
             save_as_composition: saveAsComposition.value,
             title: compositionTitle.value.trim() || null,
@@ -556,6 +608,8 @@ const reset = () => {
     fileTextPreview.value = null
     uploadedFilePath.value = null
     importList.value = []
+    baselineImportItems.value = {}
+    baselineQuestionIndices.value = {}
     step.value = 'upload'
     error.value = null
     paper.value = null

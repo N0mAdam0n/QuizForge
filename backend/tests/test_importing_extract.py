@@ -1,5 +1,7 @@
 """Phase 2 单测:抽取阶段拆分件(temp_id 分配、PromptBuilder tag 注入、图片遮罩还原)。"""
 
+import pytest
+
 import app.services.importing.extract as extract_module
 from app.models.subject import Subject
 from app.models.tag import Tag
@@ -79,6 +81,31 @@ async def test_multi_strategy_falls_back_to_ai_when_local_parse_finds_no_questio
 
     assert ai.called
     assert result.questions == [{"content": "识别结果"}]
+    assert result.diagnostics["ai_called"] is True
+    assert result.diagnostics["chosen_strategy"] == "ai"
+
+
+def test_score_details_preserve_existing_score_and_expose_per_question_values():
+    result = ExtractionResult(
+        questions=[
+            {
+                "content": "题目一",
+                "q_type": "single_choice",
+                "options": ["A", "B"],
+                "answer": "A",
+            },
+            {"content": "题目二", "q_type": "free_response", "answer": "答案"},
+        ]
+    )
+
+    details = MultiStrategyExtractor._score_details(result, "1. 题目一\n2. 题目二")
+
+    assert MultiStrategyExtractor._score(result, "1. 题目一\n2. 题目二") == details.combined
+    assert details.per_question == [1.0, pytest.approx(0.85)]
+    assert details.quality == pytest.approx(0.925)
+    assert details.coverage == 1.0
+    assert details.expected_count == 2
+    assert details.extracted_count == 2
 
 
 async def test_prompt_builder_injects_tag_context(db_session):

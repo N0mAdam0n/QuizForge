@@ -9,8 +9,63 @@ from app.models.question import QuestionType, QuestionStatus
 from app.models.import_task import ImportTask, ImportTaskStatus
 from app.services.importing.contracts import ImportDefaults
 from app.services.importing.normalize import question_importer
+from app.services.telemetry import telemetry
 
 router = APIRouter()
+
+
+def _question_review_fields(before: Any, after: Any) -> list[str]:
+    fields: list[str] = []
+    for source, target in (
+        ("content", "content"),
+        ("options", "options"),
+        ("answer", "answer"),
+        ("analysis", "analysis"),
+        ("q_type", "q_type"),
+        ("difficulty", "difficulty"),
+    ):
+        old_value = before.get(source) if isinstance(before, dict) else getattr(before, source, None)
+        new_value = getattr(after, target, None)
+        if hasattr(old_value, "value"):
+            old_value = old_value.value
+        if hasattr(new_value, "value"):
+            new_value = new_value.value
+        if isinstance(old_value, str) and source in {"content", "answer", "analysis"}:
+            try:
+                import json
+
+                old_value = json.loads(old_value)
+            except (ValueError, TypeError):
+                pass
+        if isinstance(new_value, str) and source in {"content", "answer", "analysis"}:
+            try:
+                import json
+
+                new_value = json.loads(new_value)
+            except (ValueError, TypeError):
+                pass
+        if old_value != new_value:
+            fields.append(target)
+    return fields
+
+
+def _question_snapshot(question: Any) -> dict[str, Any]:
+    return {
+        field: getattr(question, field, None)
+        for field in ("content", "options", "answer", "analysis", "q_type", "difficulty", "source")
+    }
+
+
+def _review_category(fields: list[str]) -> str:
+    if "answer" in fields:
+        return "answer_fix"
+    if "options" in fields:
+        return "option_fix"
+    if "q_type" in fields:
+        return "type_fix"
+    if "content" in fields or "analysis" in fields:
+        return "format"
+    return "other"
 
 
 @router.get("", response_model=schemas.QuestionPage)
@@ -184,11 +239,27 @@ async def update_question(
     question_in: schemas.QuestionUpdate,
     current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
-    return await capabilities.run(
+    before_question = await crud.question.get(db=db, id=id)
+    before = _question_snapshot(before_question) if before_question is not None else None
+    updated = await capabilities.run(
         "question.update",
         deps.api_context(db, current_user),
         question_caps.QuestionUpdateInput(id=id, data=question_in),
     )
+    if before is not None:
+        changed = _question_review_fields(before, updated)
+        if "tag_ids" in question_in.model_fields_set:
+            changed.append("tags")
+        if before["source"] != getattr(updated, "source", None):
+            changed.append("other")
+        telemetry.emit_review_edit(
+            question_id=id,
+            import_task_id=getattr(updated, "import_task_id", None),
+            fields_changed=changed,
+            accepted_unchanged=not changed,
+            edit_category=_review_category(changed),
+        )
+    return updated
 
 @router.post("/{id}/review", response_model=schemas.Question)
 async def review_question(
@@ -198,11 +269,22 @@ async def review_question(
     review_in: schemas.QuestionReview,
     current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
-    return await capabilities.run(
+    before = await crud.question.get(db=db, id=id)
+    updated = await capabilities.run(
         "question.review",
         deps.api_context(db, current_user),
         question_caps.QuestionReviewInput(id=id, data=review_in),
     )
+    if before is not None:
+        accepted = review_in.action == "approve"
+        telemetry.emit_review_edit(
+            question_id=id,
+            import_task_id=getattr(updated, "import_task_id", None),
+            fields_changed=[] if accepted else ["other"],
+            accepted_unchanged=accepted,
+            edit_category="other",
+        )
+    return updated
 
 @router.delete("/{id}", response_model=schemas.Question)
 async def delete_question(
@@ -211,11 +293,21 @@ async def delete_question(
     id: int,
     current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
-    return await capabilities.run(
+    before = await crud.question.get(db=db, id=id)
+    deleted = await capabilities.run(
         "question.delete",
         deps.api_context(db, current_user),
         question_caps.QuestionIdInput(id=id),
     )
+    if before is not None and before.deleted_at is None:
+        telemetry.emit_review_edit(
+            question_id=id,
+            import_task_id=getattr(deleted, "import_task_id", None),
+            fields_changed=["other"],
+            accepted_unchanged=False,
+            edit_category="delete",
+        )
+    return deleted
 
 @router.post("/batch-delete", response_model=Any)
 async def delete_questions_batch(
@@ -224,9 +316,24 @@ async def delete_questions_batch(
     delete_data: schemas.QuestionBatchDelete,
     current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
-    return await capabilities.run(
+    was_deleted = {}
+    for question_id in delete_data.ids:
+        question = await db.get(models.Question, question_id)
+        was_deleted[question_id] = question is None or question.deleted_at is not None
+    result = await capabilities.run(
         "question.batch_delete", deps.api_context(db, current_user), delete_data
     )
+    for question_id in delete_data.ids:
+        question = await db.get(models.Question, question_id)
+        if question is not None and not was_deleted[question_id] and question.deleted_at is not None:
+            telemetry.emit_review_edit(
+                question_id=question_id,
+                import_task_id=question.import_task_id,
+                fields_changed=["other"],
+                accepted_unchanged=False,
+                edit_category="delete",
+            )
+    return result
 
 @router.post("/batch-update", response_model=Any)
 async def update_questions_batch(
@@ -235,9 +342,32 @@ async def update_questions_batch(
     update_data: schemas.QuestionBatchUpdate,
     current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
-    return await capabilities.run(
+    before: dict[int, tuple[Optional[str], Optional[int], Optional[int]]] = {}
+    for question_id in update_data.ids:
+        question = await db.get(models.Question, question_id)
+        if question is not None:
+            before[question_id] = (
+                question.source,
+                question.import_task_id,
+                question.created_by,
+            )
+    result = await capabilities.run(
         "question.batch_update", deps.api_context(db, current_user), update_data
     )
+    for question_id, (old_source, import_task_id, created_by) in before.items():
+        if (
+            old_source != update_data.source
+            and update_data.source is not None
+            and (current_user.is_superuser or created_by == current_user.id)
+        ):
+            telemetry.emit_review_edit(
+                question_id=question_id,
+                import_task_id=import_task_id,
+                fields_changed=["other"],
+                accepted_unchanged=False,
+                edit_category="other",
+            )
+    return result
 
 @router.post("/batch-confirm", response_model=Any)
 async def batch_confirm_questions(
@@ -246,6 +376,32 @@ async def batch_confirm_questions(
     confirm_data: schemas.QuestionBatchConfirm,
     current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
-    return await capabilities.run(
+    initial_status = {}
+    for question_id in confirm_data.question_ids:
+        question = await db.get(models.Question, question_id)
+        initial_status[question_id] = question.status if question is not None else None
+    result = await capabilities.run(
         "question.batch_confirm", deps.api_context(db, current_user), confirm_data
     )
+    if result.get("processed_count", 0):
+        for question_id in confirm_data.question_ids:
+            question = await db.get(models.Question, question_id)
+            if question is None or initial_status.get(question_id) != QuestionStatus.DRAFT:
+                continue
+            if confirm_data.action == "approve":
+                telemetry.emit_review_edit(
+                    question_id=question_id,
+                    import_task_id=question.import_task_id,
+                    fields_changed=[],
+                    accepted_unchanged=True,
+                    edit_category="other",
+                )
+            elif question.deleted_at is not None:
+                telemetry.emit_review_edit(
+                    question_id=question_id,
+                    import_task_id=question.import_task_id,
+                    fields_changed=["other"],
+                    accepted_unchanged=False,
+                    edit_category="delete",
+                )
+    return result

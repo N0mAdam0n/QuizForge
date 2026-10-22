@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, watchEffect } from 'vue'
+import { useLocalStorage } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-import { Settings, Cpu, MessageSquareText, UserPlus } from '@lucide/vue'
+import { Settings, Cpu, MessageSquareText, UserPlus, RefreshCw } from '@lucide/vue'
 import PageHeader from '~/components/PageHeader.vue'
 import AiSettings from '~/components/AiSettings.vue'
 import AiPromptsConfig from '~/components/AiPromptsConfig.vue'
@@ -54,6 +55,44 @@ const REGISTRATION_APPROVAL_KEY = 'USER_REGISTRATION_REQUIRES_APPROVAL'
 const registrationEnabled = ref(false)
 const registrationRequiresApproval = ref(false)
 const registrationSaving = ref(false)
+
+interface PublicTelemetryStats {
+  total_devices: number
+  active_devices_7d: number
+  active_devices_30d: number
+  total_events: number
+  generated_at: string
+}
+
+const publicTelemetryStats = useLocalStorage<PublicTelemetryStats | null>(
+  'question-bank-public-telemetry-stats',
+  null,
+)
+const publicTelemetryStatsFetchedAt = useLocalStorage(
+  'question-bank-public-telemetry-stats-fetched-at',
+  0,
+)
+const publicTelemetryStatsLoading = ref(false)
+
+const refreshPublicTelemetryStats = async (force = false) => {
+  if (!isAdmin.value || publicTelemetryStatsLoading.value) return
+  if (
+    !force
+    && Date.now() - publicTelemetryStatsFetchedAt.value < 10 * 60 * 1000
+  ) return
+
+  publicTelemetryStatsLoading.value = true
+  try {
+    publicTelemetryStats.value = await $api<PublicTelemetryStats>(
+      '/telemetry/stats/public',
+    )
+    publicTelemetryStatsFetchedAt.value = Date.now()
+  } catch (error) {
+    console.debug('Could not refresh public telemetry statistics', error)
+  } finally {
+    publicTelemetryStatsLoading.value = false
+  }
+}
 
 const fetchSettings = async () => {
   loading.value = true
@@ -125,6 +164,7 @@ const updateSetting = async (setting: SystemSetting) => {
 onMounted(() => {
   if (user.value?.is_superuser) {
     fetchSettings()
+    void refreshPublicTelemetryStats()
   }
 })
 </script>
@@ -188,6 +228,41 @@ onMounted(() => {
         </div>
 
         <div v-else class="grid gap-6">
+          <Card>
+            <CardHeader class="flex flex-row items-start justify-between gap-4">
+              <div class="space-y-1">
+                <CardTitle class="text-base">累计参与安装数</CardTitle>
+                <CardDescription>
+                  全项目汇总，仅统计明确同意参与的安装；不代表独立自然人数。
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                :disabled="publicTelemetryStatsLoading"
+                @click="refreshPublicTelemetryStats(true)"
+              >
+                <RefreshCw
+                  class="mr-2 size-4"
+                  :class="{ 'animate-spin': publicTelemetryStatsLoading }"
+                />
+                刷新
+              </Button>
+            </CardHeader>
+            <CardContent class="space-y-2">
+              <p class="text-4xl font-semibold tabular-nums">
+                {{ publicTelemetryStats ? publicTelemetryStats.total_devices.toLocaleString() : '—' }}
+              </p>
+              <p v-if="publicTelemetryStats" class="text-sm text-muted-foreground">
+                近 30 天活跃安装：{{ publicTelemetryStats.active_devices_30d.toLocaleString() }}
+                · 统计时间：{{ new Date(publicTelemetryStats.generated_at).toLocaleString() }}
+              </p>
+              <p v-else class="text-sm text-muted-foreground">
+                暂无缓存数据；统计服务不可用时会自动重试，不影响其他功能。
+              </p>
+            </CardContent>
+          </Card>
+
           <Card v-for="setting in settings" :key="setting.key">
             <CardHeader>
               <CardTitle class="text-base">{{ setting.key }}</CardTitle>

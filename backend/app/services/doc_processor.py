@@ -8,9 +8,27 @@ from app.services.importing.extract import (
     MultiStrategyExtractor,
     TemplateExtractor,
 )
+from app.services.importing.contracts import ExtractionResult
 from app.services.importing.ingest import DocxIngestor, ImageIngestor, MarkdownArchiveIngestor, MarkdownIngestor
+from app.services.telemetry import telemetry
 
 logger = logging.getLogger(__name__)
+
+
+def _emit_parse_telemetry(
+    extraction: ExtractionResult,
+    task_id: str,
+    doc_format: str,
+    mode: str,
+    method: str,
+) -> None:
+    if mode == "extract" and method == "auto" and extraction.diagnostics:
+        telemetry.emit_import_parse(
+            task_id=task_id,
+            diagnostics=extraction.diagnostics,
+            doc_format=doc_format,
+        )
+
 
 class DocProcessor:
     def __init__(self):
@@ -55,6 +73,7 @@ class DocProcessor:
         extraction = await self._extractor_for(method).extract(
             doc.markdown, db, filename=doc.filename, mode=mode, subject_id=subject_id
         )
+        _emit_parse_telemetry(extraction, doc.task_id, "md", mode, method)
         return {
             "task_id": doc.task_id,
             "content": doc.markdown,
@@ -72,6 +91,7 @@ class DocProcessor:
         extraction = await self._extractor_for(method).extract(
             doc.markdown, db, filename=doc.filename, mode=mode, subject_id=subject_id
         )
+        _emit_parse_telemetry(extraction, doc.task_id, "md", mode, method)
         return {
             "task_id": doc.task_id,
             "content": doc.markdown,
@@ -93,9 +113,10 @@ class DocProcessor:
             Dict with task_id, image_url, and extracted questions
         """
         doc = await self._image_ingestor.ingest(image_file, task_id=task_id)
-        extraction = await self._ai_extractor.extract(
+        extraction = await self._multi_strategy_extractor.extract(
             "", db, image_data=doc.image_data, mode=mode, subject_id=subject_id
         )
+        _emit_parse_telemetry(extraction, doc.task_id, "image", mode, "auto")
         return {
             "task_id": doc.task_id,
             "image_url": doc.image_url,
@@ -111,6 +132,7 @@ class DocProcessor:
         extraction = await self._extractor_for(method).extract(
             doc.markdown, db, filename=doc.filename, mode=mode, subject_id=subject_id
         )
+        _emit_parse_telemetry(extraction, doc.task_id, "docx", mode, method)
         return {
             "task_id": doc.task_id,
             "content": doc.markdown,

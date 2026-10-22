@@ -57,6 +57,35 @@ class PaperImportPreviewRequest(BaseModel):
     outline: List[PaperOutlineItemInput] = Field(default_factory=list)
 
 
+class PaperImportReviewChange(BaseModel):
+    temp_id: str
+    question_index: Optional[int] = Field(default=None, ge=0, le=10_000)
+    fields_changed: List[
+        Literal[
+            "content",
+            "options",
+            "answer",
+            "analysis",
+            "q_type",
+            "difficulty",
+            "tags",
+            "other",
+        ]
+    ] = Field(default_factory=list, max_length=8)
+    edit_category: Literal[
+        "typo",
+        "boundary_split",
+        "boundary_merge",
+        "option_fix",
+        "answer_fix",
+        "type_fix",
+        "format",
+        "delete",
+        "other",
+    ] = "other"
+    accepted_unchanged: bool
+
+
 class SkippedQuestionRead(BaseModel):
     index: int
     temp_id: Optional[str] = None
@@ -79,6 +108,7 @@ class PaperImportCommitRequest(BaseModel):
     scope: Literal["personal", "shared"]
     question_scope: Optional[Literal["personal", "shared"]] = None
     questions: List[PaperImportQuestion] = Field(default_factory=list)
+    review_changes: List[PaperImportReviewChange] = Field(default_factory=list)
     outline: List[PaperOutlineItemInput] = Field(default_factory=list)
     save_as_composition: bool = False
     title: Optional[str] = None

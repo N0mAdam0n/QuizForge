@@ -45,6 +45,9 @@ const colorMode = useColorMode()
 const toggleColorMode = () => {
   colorMode.value = colorMode.value === 'dark' ? 'light' : 'dark'
 }
+const openTelemetryConsent = () => {
+  window.dispatchEvent(new Event('open-telemetry-consent'))
+}
 
 const handleLogout = () => {
   logout()
@@ -298,6 +301,10 @@ const navActiveClass = 'border-l-2 border-transparent data-[active=true]:border-
               <DropdownMenuItem @click="isChangePasswordOpen = true">
                 <KeyRound class="mr-2 size-4" />
                 修改密码
+              </DropdownMenuItem>
+              <DropdownMenuItem @click="openTelemetryConsent">
+                <Lock class="mr-2 size-4" />
+                数据收集声明
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem @click="toggleColorMode">

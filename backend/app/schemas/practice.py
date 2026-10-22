@@ -67,6 +67,8 @@ class PracticeAnswerSubmit(BaseModel):
     answer: Any = None
     self_assessed: Optional[bool] = None
     dont_know: bool = False
+    time_ms: Optional[int] = Field(default=None, ge=0, le=3_600_000)
+    session_id: Optional[str] = Field(default=None, max_length=64)
 
 
 class PracticeAnswerResult(BaseModel):

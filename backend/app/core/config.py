@@ -87,6 +87,14 @@ class Settings(BaseSettings):
     # config.json is present, the app boots into first-run "setup mode".
     DB_URL: str = ""
 
+    # Anonymous research telemetry is opt-in and can be disabled at deployment
+    # level independently of a user's consent.
+    TELEMETRY_ENABLED: bool = True
+    TELEMETRY_ENDPOINT: str = "https://120.26.57.15"
+    TELEMETRY_CERT_SHA256: str = (
+        "28DE6079ACE8EE8C9B7AABE4C75171EB28DB32932C40A367B978253B4F57FBDC"
+    )
+
     # ChromaDB
     CHROMADB_HOST: str = "localhost"
     CHROMADB_PORT: int = 8001

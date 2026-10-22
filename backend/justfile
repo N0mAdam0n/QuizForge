@@ -27,14 +27,12 @@ package-portable: build-frontend
     uv run --with pyinstaller pyinstaller run-portable.spec --clean --noconfirm
     uv run python scripts/package_portable.py
 
-# Build both Windows desktop editions and copy the deliverables to the requested
-# compile-output folder.
+# Build both Windows desktop editions and create a versioned output folder under
+# D:\VS Code Compile. The output-version marker advances only after success.
 package-to-output: build-frontend
     uv run --with pyinstaller pyinstaller run.spec --clean
     uv run --with pyinstaller pyinstaller run-portable.spec --clean --noconfirm --distpath build\package-to-output
-    New-Item -ItemType Directory -Force -Path 'D:\VS Code Compile' | Out-Null
-    uv run python scripts/package_portable.py --dist-dir build\package-to-output\QuestionBank-Portable --archive-path 'D:\VS Code Compile\QuestionBank-Lite.zip'
-    Copy-Item -Force 'dist\question-bank.exe' 'D:\VS Code Compile\QuestionBank-Desktop.exe'
+    uv run python scripts/package_to_output.py
 
 # Run the unified launcher locally (dev): migrations + worker + API + open UI.
 run-desktop:

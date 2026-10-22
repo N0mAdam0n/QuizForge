@@ -17,6 +17,7 @@ from app.schemas.paper_import import (
     PaperImportPreviewRequest,
     PaperImportPreviewResponse,
 )
+from app.services.telemetry import telemetry
 
 router = APIRouter()
 
@@ -62,7 +63,7 @@ async def commit_paper_import(
     current_user: models.User = Depends(deps.get_current_active_user),
 ) -> Any:
     scope_type, owner_id = _resolve_scope(ScopeType(payload.scope), current_user)
-    return await capabilities.run(
+    result = await capabilities.run(
         "paper_import.commit",
         deps.api_context(db, current_user, subject_id=subject_id),
         paper_import_caps.PaperImportCommitInput(
@@ -83,3 +84,18 @@ async def commit_paper_import(
             idempotency_key=payload.idempotency_key,
         ),
     )
+    if not result.reused_existing:
+        review_changes = {change.temp_id: change for change in payload.review_changes}
+        for temp_id, question_id in result.temp_id_map.items():
+            change = review_changes.get(temp_id)
+            if change is None:
+                continue
+            telemetry.emit_review_edit(
+                question_id=question_id,
+                import_task_id=result.import_task_id,
+                question_index=change.question_index,
+                fields_changed=change.fields_changed,
+                accepted_unchanged=change.accepted_unchanged,
+                edit_category=change.edit_category,
+            )
+    return result

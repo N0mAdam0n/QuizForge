@@ -1,4 +1,5 @@
 import sys
+import asyncio
 import os
 import logging
 from pathlib import Path
@@ -14,12 +15,14 @@ from app.api.v1.api import api_router
 from app.capabilities.errors import DomainError, status_for
 from app.core.config import settings, is_configured
 from app.services.embedding import reload_embedding_function
+from app.services.telemetry import telemetry
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    telemetry_task = None
     # Startup: only touch the database once the app has been configured.
     # Before first-run setup there is no database to talk to.
     if is_configured():
@@ -27,8 +30,19 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("No database configured yet - starting in setup mode.")
 
-    yield
-    # Shutdown
+    if telemetry.enabled:
+        telemetry.emit_app_meta()
+        telemetry_task = asyncio.create_task(telemetry.run())
+    try:
+        yield
+    finally:
+        if telemetry_task is not None:
+            telemetry.stop()
+            telemetry_task.cancel()
+            try:
+                await telemetry_task
+            except asyncio.CancelledError:
+                pass
 
 app = FastAPI(title="QuestionBank API", version=__version__, lifespan=lifespan)
 

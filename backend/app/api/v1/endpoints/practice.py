@@ -26,6 +26,7 @@ from app.schemas.practice import (
     WrongBookQuestion,
 )
 from app.services.question_content import parse_json_field
+from app.services.telemetry import telemetry
 
 router = APIRouter()
 _VALID_MODES = {"sequential", "random", "type", "wrong", "range"}
@@ -837,6 +838,14 @@ async def submit_practice_answer(
         )
     )
     await db.commit()
+
+    telemetry.emit_practice_answer(
+        question_id=question.id,
+        question_type=question.q_type.value,
+        correct=is_correct,
+        time_ms=submission.time_ms,
+        session_id=submission.session_id,
+    )
 
     correct_answer = parse_json_field(question.answer)
     analysis = parse_json_field(question.analysis)
