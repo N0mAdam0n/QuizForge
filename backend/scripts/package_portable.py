@@ -41,7 +41,11 @@ def main() -> None:
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(dist_dir.rglob("*")):
-            if path.is_file() and path.relative_to(dist_dir).parts[0] != "data":
+            relative_path = path.relative_to(dist_dir)
+            if (
+                path.is_file()
+                and relative_path.parts[0] not in {"data", "updates"}
+            ):
                 archive.write(path, path.relative_to(dist_dir.parent))
 
     print(f"Created {archive_path}")

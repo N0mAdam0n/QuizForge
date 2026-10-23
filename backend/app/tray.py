@@ -16,6 +16,7 @@ LAN does not fall back to an insecure default.
 import multiprocessing
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -139,8 +140,9 @@ class _Server:
         self._server = None
         self._thread: "threading.Thread | None" = None
         self._worker: "multiprocessing.Process | None" = None
+        self._migrations_ok = False
 
-    def _run_migrations_once(self) -> None:
+    def _run_migrations_once(self) -> bool:
         from app.core.config import get_db_url, is_configured
         from app.db.migrations import run_migrations
 
@@ -149,6 +151,8 @@ class _Server:
                 run_migrations(get_db_url())
             except Exception as exc:  # noqa: BLE001
                 print(f"[tray] migration failed: {exc}", file=sys.stderr)
+                return False
+        return True
 
     def start(self, lan: bool) -> None:
         import uvicorn
@@ -158,7 +162,8 @@ class _Server:
         from app.services import mdns
 
         settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        self._run_migrations_once()
+        self._migrations_ok = self._run_migrations_once()
+        app.state.update_migrations_ok = self._migrations_ok
 
         if self._worker is None or not self._worker.is_alive():
             self._worker = multiprocessing.Process(target=_start_worker, daemon=True)
@@ -176,7 +181,7 @@ class _Server:
         self._thread = threading.Thread(target=self._server.run, daemon=True)
         self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, *, stop_worker: bool = True) -> None:
         from app.services import mdns
 
         mdns.stop()
@@ -186,9 +191,31 @@ class _Server:
             self._thread.join(timeout=10)
         self._server = None
         self._thread = None
+        if stop_worker and self._worker is not None and self._worker.is_alive():
+            if os.name == "nt" and self._worker.pid is not None:
+                try:
+                    subprocess.run(
+                        [
+                            "taskkill.exe",
+                            "/PID",
+                            str(self._worker.pid),
+                            "/T",
+                            "/F",
+                        ],
+                        capture_output=True,
+                        check=False,
+                        timeout=10,
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    self._worker.terminate()
+            else:
+                self._worker.terminate()
+            self._worker.join(timeout=10)
+        if stop_worker:
+            self._worker = None
 
     def restart(self, lan: bool) -> None:
-        self.stop()
+        self.stop(stop_worker=False)
         self.start(lan)
 
 
@@ -251,6 +278,16 @@ def run_tray() -> None:
     def on_quit(_icon, _item) -> None:
         server.stop()
         icon.stop()
+
+    def stop_for_update() -> None:
+        server.stop()
+        icon.stop()
+        time.sleep(0.5)
+        os._exit(0)
+
+    from app.services.update_service import update_service
+
+    update_service.set_shutdown_callback(stop_for_update)
 
     icon.menu = Menu(
         MenuItem("打开题库", on_open, default=True),

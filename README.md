@@ -69,6 +69,12 @@ docker compose up -d
 
 同意状态按一个后端实例统一生效，不按账号隔离；用户菜单中的“数据收集声明”可随时撤回。撤回会停止该实例后续上报并清空待上传队列及本地设备凭证。系统设置中的累计参与安装数仅管理员可见，来自接收服务器的匿名汇总；只统计同意参与的安装，不代表独立自然人数。可通过环境变量 `TELEMETRY_ENABLED=false` 完全关闭上报；仅用于本机测试时，可将 `TELEMETRY_ENDPOINT` 设置为 `http://127.0.0.1:<port>`。
 
+### Windows 便携版热更新
+
+Windows 便携版支持通过 TUF 签名元数据检查增量或完整更新；安装版及 Docker 部署仍使用原有更新方式。更新包只替换程序文件，不覆盖便携目录中的 `data/` 和 `updates/`；安装前会备份 SQLite 数据库，启动迁移检查失败时自动恢复程序与数据库。热更新需要客户端内置受信任的 TUF `root.json`，并由更新服务器提供签名元数据和目标文件；未配置这些发布条件的版本继续提供 GitHub Releases 手动更新。下载请求不携带遥测设备标识或 token，但更新服务器的常规访问日志可能记录连接 IP。MySQL 部署不支持此便携版热更新流程。
+
+首次配置签名仓库时，在 `backend/` 下运行 `uv run python scripts/manage_portable_updates.py init`。脚本会在仓库外的 `D:\qb-keys` 创建加密签名密钥，并将公开信任根复制到 `backend/deploy/windows/update/root.json`；之后必须重新构建客户端。每次发布时，确保 `app/_version.py` 使用新的 PEP 440 版本、构建便携目录，再运行 `uv run python scripts/manage_portable_updates.py publish`。将脚本输出中的 `targets/` 先于 `metadata/` 上传到已配置的更新服务器；私钥不得上传或提交。更新服务器的 nginx 静态目录、限流及 HTTPS 证书需另行按部署方案配置，客户端发布工具不会修改服务器。
+
 ### 本地开发
 
 后端（`backend/`）：

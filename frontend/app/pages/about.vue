@@ -13,7 +13,11 @@ definePageMeta({
 const { user } = useAuth()
 const isSuperuser = computed(() => !!user.value?.is_superuser)
 
-const { state: updateState, check: checkUpdate } = useUpdateCheck()
+const {
+  state: updateState,
+  check: checkUpdate,
+  downloadAndInstall,
+} = useUpdateCheck()
 const localVersion = ref<string>('-')
 
 const REPO_URL = 'https://github.com/N0mAdam0n/question-bank-Nom'
@@ -54,10 +58,34 @@ const handleCheckUpdate = async () => {
   if (updateState.value.error) {
     toast.error('检查更新失败', { description: updateState.value.error })
   } else if (updateState.value.hasUpdate) {
-    window.open(updateState.value.releaseUrl, '_blank')
+    if (!updateState.value.portable) {
+      window.open(updateState.value.releaseUrl, '_blank')
+      return
+    }
+    try {
+      await downloadAndInstall()
+      if (updateState.value.phase === 'ready') {
+        toast.success(`v${updateState.value.latest} 已下载`, {
+          description: '你可以稍后再次点击更新按钮完成安装。',
+        })
+      }
+    } catch (error) {
+      toast.error('更新失败', {
+        description: error instanceof Error ? error.message : '请稍后重试。',
+      })
+    }
+  } else if (updateState.value.portableInstall && updateState.value.phase === 'unconfigured') {
+    toast.info('自动更新服务尚未配置', {
+      description: '目前仍可通过 GitHub Releases 手动下载更新。',
+    })
   } else {
     toast.success('已是最新版本', { description: `当前版本 v${updateState.value.current}` })
   }
+}
+
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 onMounted(async () => {
@@ -95,10 +123,26 @@ onMounted(async () => {
         当前版本 v{{ localVersion }}
       </p>
       <div class="flex flex-wrap items-center justify-center gap-3 pt-4">
-        <Button v-if="isSuperuser" variant="default" class="rounded-full px-6 shadow-md" @click="handleCheckUpdate">
+        <Button
+          v-if="isSuperuser"
+          variant="default"
+          class="rounded-full px-6 shadow-md"
+          :disabled="updateState.phase === 'downloading' || updateState.phase === 'installing'"
+          @click="handleCheckUpdate"
+        >
           <Download v-if="updateState.hasUpdate" class="mr-2 h-4 w-4" />
           <RefreshCw v-else class="mr-2 h-4 w-4" :class="updateState.checking ? 'animate-spin' : ''" />
-          {{ updateState.hasUpdate ? `下载新版本 v${updateState.latest}` : '检查更新' }}
+          {{
+            updateState.phase === 'downloading'
+              ? '正在下载…'
+              : updateState.phase === 'installing'
+                ? '正在重启…'
+                : updateState.phase === 'ready'
+                  ? `重启安装 v${updateState.latest}`
+                  : updateState.hasUpdate
+                    ? `${updateState.portable ? '下载更新' : '下载新版本'} v${updateState.latest}`
+                    : '检查更新'
+          }}
         </Button>
         <Button v-else variant="secondary" disabled class="rounded-full px-6 opacity-80">
           <Download v-if="updateState.hasUpdate" class="mr-2 h-4 w-4" />
@@ -116,6 +160,18 @@ onMounted(async () => {
           </a>
         </Button>
       </div>
+      <p
+        v-if="isSuperuser && updateState.portable && updateState.phase === 'downloading'"
+        class="text-sm text-muted-foreground"
+      >
+        已下载 {{ formatBytes(updateState.downloaded) }} / {{ formatBytes(updateState.size) }}
+      </p>
+      <p
+        v-if="isSuperuser && updateState.portableInstall && updateState.phase === 'unconfigured'"
+        class="max-w-lg text-sm text-muted-foreground"
+      >
+        自动更新信任配置尚未随此版本发布；可通过 GitHub Releases 手动更新。
+      </p>
     </section>
 
     <section class="space-y-4 rounded-[20px] border border-border/50 bg-background/70 p-6">

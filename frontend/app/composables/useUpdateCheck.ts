@@ -13,6 +13,19 @@ interface VersionInfo {
   version: string
   repo: string
   releases_url: string
+  portable?: boolean
+  updater?: string
+}
+
+interface PortableUpdateInfo {
+  phase: string
+  current_version: string
+  latest_version: string
+  available: boolean
+  is_patch: boolean
+  size: number
+  downloaded: number
+  error: string
 }
 
 interface UpdateState {
@@ -23,6 +36,12 @@ interface UpdateState {
   checkedAt: number
   checking: boolean
   error: string | null
+  portable: boolean
+  portableInstall: boolean
+  phase: string
+  size: number
+  downloaded: number
+  isPatch: boolean
 }
 
 interface ParsedVersion {
@@ -111,6 +130,12 @@ export function useUpdateCheck() {
     checkedAt: 0,
     checking: false,
     error: null,
+    portable: false,
+    portableInstall: false,
+    phase: 'idle',
+    size: 0,
+    downloaded: 0,
+    isPatch: false,
   })
 
   const { $api } = useNuxtApp()
@@ -129,7 +154,24 @@ export function useUpdateCheck() {
       // Current version + release repo from our own backend.
       const info = await $api<VersionInfo>('/system/version')
       state.value.current = info.version
+      state.value.portableInstall = !!info.portable
 
+      if (info.portable && info.updater === 'tufup') {
+        const update = await $api<PortableUpdateInfo>('/system/update/check')
+        state.value.portable = true
+        state.value.latest = update.latest_version
+        state.value.hasUpdate = update.available
+        state.value.releaseUrl = info.releases_url
+        state.value.phase = update.phase
+        state.value.size = update.size
+        state.value.downloaded = update.downloaded
+        state.value.isPatch = update.is_patch
+        state.value.error = update.phase === 'failed' ? update.error : null
+        return
+      }
+
+      state.value.portable = false
+      state.value.phase = info.portable ? 'unconfigured' : 'idle'
       // Latest release from GitHub (public API, CORS-enabled).
       const isCurrentPrerelease = parseVersion(info.version).prerelease !== null
       const release = await fetchLatestRelease(info.repo, isCurrentPrerelease)
@@ -145,5 +187,44 @@ export function useUpdateCheck() {
     }
   }
 
-  return { state, check }
+  async function downloadAndInstall(): Promise<void> {
+    if (!state.value.portable) {
+      throw new Error('此版本不支持应用内更新')
+    }
+
+    if (state.value.phase === 'ready') {
+      if (!window.confirm(`更新 v${state.value.latest} 已下载完成，立即重启安装吗？`)) {
+        return
+      }
+      await $api('/system/update/install', { method: 'POST' })
+      state.value.phase = 'installing'
+      return
+    }
+
+    await $api('/system/update/download', { method: 'POST' })
+    state.value.phase = 'downloading'
+    const deadline = Date.now() + 15 * 60 * 1000
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      const update = await $api<PortableUpdateInfo>('/system/update/status')
+      state.value.phase = update.phase
+      state.value.size = update.size
+      state.value.downloaded = update.downloaded
+      state.value.error = update.error || null
+      if (update.phase === 'failed') {
+        throw new Error(update.error || '更新下载失败，请稍后重试')
+      }
+      if (update.phase === 'ready') {
+        if (!window.confirm(`更新 v${state.value.latest} 已下载完成，立即重启安装吗？`)) {
+          return
+        }
+        await $api('/system/update/install', { method: 'POST' })
+        state.value.phase = 'installing'
+        return
+      }
+    }
+    throw new Error('更新下载仍在进行，请稍后查看状态')
+  }
+
+  return { state, check, downloadAndInstall }
 }

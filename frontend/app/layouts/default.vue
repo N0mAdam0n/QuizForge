@@ -7,7 +7,11 @@ import { useLocalStorage, useMediaQuery, useSessionStorage } from '@vueuse/core'
 
 const { fetchUser, token, user } = useAuth()
 const { hasSubjects } = useSubjectContext()
-const { state: updateState, check: checkUpdate } = useUpdateCheck()
+const {
+  state: updateState,
+  check: checkUpdate,
+  downloadAndInstall,
+} = useUpdateCheck()
 const ignoredVersion = useLocalStorage('ignored-update-version', '')
 const hasPrompted = useSessionStorage('update-prompted', false)
 const isMobile = useMediaQuery('(max-width: 768px)')
@@ -30,12 +34,24 @@ onMounted(async () => {
     hasPrompted.value = true
     
     if (user.value?.is_superuser) {
-      // 管理员提示更新步骤与下载
+      const startUpdate = () => {
+        if (!updateState.value.portable) {
+          window.open(updateState.value.releaseUrl, '_blank')
+          return
+        }
+        void downloadAndInstall().catch((error: unknown) => {
+          toast.error('更新失败', {
+            description: error instanceof Error ? error.message : '请稍后重试。',
+          })
+        })
+      }
       toast.info(`发现新版本 v${latest}`, {
-        description: `当前 v${updateState.value.current} · 请在服务器上运行新版安装程序更新`,
+        description: updateState.value.portable
+          ? `当前 v${updateState.value.current} · ${updateState.value.isPatch ? '增量更新' : '完整更新'}`
+          : `当前 v${updateState.value.current} · 请下载新版安装程序更新`,
         action: {
-          label: '下载新版',
-          onClick: () => window.open(updateState.value.releaseUrl, '_blank'),
+          label: updateState.value.portable ? '立即更新' : '下载新版',
+          onClick: startUpdate,
         },
         cancel: {
           label: '忽略此版',

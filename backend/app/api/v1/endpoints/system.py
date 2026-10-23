@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends
+import asyncio
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app._version import __version__
 from app.api import deps
+from app.core.config import is_configured
+from app.services.update_service import update_service
 
 router = APIRouter()
 
@@ -21,6 +25,8 @@ async def get_version() -> dict:
         "version": __version__,
         "repo": GITHUB_REPO,
         "releases_url": f"https://github.com/{GITHUB_REPO}/releases/latest",
+        "portable": update_service.is_portable,
+        "updater": "tufup" if update_service.configured else "none",
     }
 
 
@@ -65,4 +71,49 @@ async def get_network_info(
         "lan_url": f"http://{ip}:{port}/" if ip else None,
         "lan_hostname": hostname,
         "lan_hostname_url": f"http://{hostname}:{port}/" if hostname else None,
+    }
+
+
+@router.get("/update/check")
+async def check_portable_update() -> dict:
+    """Check signed update metadata without transmitting a device identifier."""
+    return await asyncio.to_thread(update_service.check)
+
+
+@router.get("/update/status")
+async def get_portable_update_status(
+    _current_user=Depends(deps.get_current_active_superuser),
+) -> dict:
+    return update_service.snapshot()
+
+
+@router.post("/update/download")
+async def download_portable_update(
+    _current_user=Depends(deps.get_current_active_superuser),
+) -> dict:
+    try:
+        return update_service.start_download()
+    except RuntimeError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.post("/update/install")
+async def install_portable_update(
+    _current_user=Depends(deps.get_current_active_superuser),
+) -> dict:
+    try:
+        return await asyncio.to_thread(update_service.install)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/update/health")
+async def portable_update_health(request: Request) -> dict:
+    """Health endpoint used by the external installer before finalizing updates."""
+    return {
+        "version": __version__,
+        "migrations_ok": bool(
+            is_configured()
+            and getattr(request.app.state, "update_migrations_ok", False)
+        ),
     }

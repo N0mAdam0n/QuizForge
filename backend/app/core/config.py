@@ -94,6 +94,8 @@ class Settings(BaseSettings):
     TELEMETRY_CERT_SHA256: str = (
         "28DE6079ACE8EE8C9B7AABE4C75171EB28DB32932C40A367B978253B4F57FBDC"
     )
+    UPDATE_METADATA_BASE_URL: str = "https://120.26.57.15/updates/metadata/"
+    UPDATE_TARGET_BASE_URL: str = "https://120.26.57.15/updates/targets/"
 
     # ChromaDB
     CHROMADB_HOST: str = "localhost"

@@ -24,3 +24,10 @@ The folder can be moved to another writable location or Windows computer.
 
 This portable edition does not install a service or configure auto-start.
 AI features require access to an AI provider configured in the application.
+
+Updates
+-------
+When a signed update is published and trusted update metadata is included in
+your build, an administrator can download and install it from the About page.
+The updater replaces application files only; it does not replace the data or
+updates folders. Keep regular backups of the complete portable folder.

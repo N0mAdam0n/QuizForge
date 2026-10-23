@@ -34,6 +34,7 @@ for pkg in [
     "pystray",
     "PIL",
     "latex2mathml",
+    "tufup",
 ]:
     try:
         d, b, h = collect_all(pkg)
@@ -48,9 +49,13 @@ datas += [
     ("alembic.ini", "."),
     ("../frontend/.output/public", "frontend"),
 ]
+_UPDATE_ROOT = os.path.join("deploy", "windows", "update", "root.json")
+if os.path.isfile(_UPDATE_ROOT):
+    datas.append((_UPDATE_ROOT, "update"))
 
 hiddenimports += collect_submodules("app")
 hiddenimports += collect_submodules("scripts")
+hiddenimports += collect_submodules("tufup")
 hiddenimports += [
     "aiosqlite",
     "passlib.handlers.bcrypt",
@@ -60,6 +65,9 @@ hiddenimports += [
     "uvicorn.protocols.websockets.auto",
     "uvicorn.lifespan.on",
     "pystray._win32",
+    "bsdiff4",
+    "tuf.ngclient",
+    "securesystemslib",
 ]
 
 a = Analysis(
@@ -84,7 +92,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -96,6 +104,6 @@ portable = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     name="QuestionBank-Portable",
 )
