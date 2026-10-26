@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         if telemetry_task is not None:
+            await telemetry.shutdown_flush(timeout=3.0)
             telemetry.stop()
             telemetry_task.cancel()
             try:

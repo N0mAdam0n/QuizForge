@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -27,6 +28,11 @@ logger = logging.getLogger(__name__)
 
 _MAX_QUEUE_SIZE = 10_000
 _BATCH_SIZE = 50
+_FLUSH_AGE_SECONDS = 180
+_SCHEMA_VERSION = 2
+# App-level pepper for the anonymous machine id. The raw MachineGuid never
+# leaves the machine; only HMAC-SHA256(pepper, guid) is sent.
+_MACHINE_PEPPER = b"QuizForge.telemetry.machine-id.v1:7f3a9c51e2b84d06"
 _MAX_BACKOFF_SECONDS = 30 * 60
 _SAFE_SHORT = re.compile(r"[^A-Za-z0-9._\- ]")
 _QUESTION_TYPES = {
@@ -40,6 +46,25 @@ _QUESTION_TYPES = {
 
 def _now() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat()
+
+
+def _read_windows_machine_guid() -> str | None:
+    if os.name != "nt":
+        return None
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography",
+            0,
+            winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0),
+        ) as key:
+            value = winreg.QueryValueEx(key, "MachineGuid")[0]
+    except OSError:
+        return None
+    value = str(value).strip().lower()
+    return value or None
 
 
 def _short(value: str | None) -> str | None:
@@ -66,6 +91,8 @@ class TelemetryService:
         self._stop = asyncio.Event()
         self._wake = asyncio.Event()
         self._attempts_since_success = 0
+        self._machine_hash_cache: str | None = None
+        self.last_upload: dict[str, Any] | None = None
 
     @property
     def enabled(self) -> bool:
@@ -140,6 +167,8 @@ class TelemetryService:
             return True
 
         self._clear_queue()
+        self._machine_hash_cache = None
+        self.last_upload = None
         try:
             self.consent_path.unlink(missing_ok=True)
         except OSError:
@@ -190,11 +219,118 @@ class TelemetryService:
             return None
         return hashlib.sha256(salt + str(value).encode("utf-8")).hexdigest()
 
+    def machine_hash(self) -> str | None:
+        """Stable pseudonymous machine id (same machine -> same id across reinstalls)."""
+        if not self.enabled or not self.consent_status():
+            return None
+        if self._machine_hash_cache:
+            return self._machine_hash_cache
+        guid = _read_windows_machine_guid()
+        if guid:
+            source = "win:" + guid
+        else:
+            state = self._read_consent() or {}
+            fallback = state.get("machine_fallback")
+            if not isinstance(fallback, str) or len(fallback) != 64:
+                fallback = secrets.token_bytes(32).hex()
+                state["machine_fallback"] = fallback
+                self._write_consent(state)
+            source = "rand:" + fallback
+        self._machine_hash_cache = hmac.new(
+            _MACHINE_PEPPER, source.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        return self._machine_hash_cache
+
+    def is_registered(self) -> bool:
+        state = self._read_consent() or {}
+        return bool(state.get("device_id") and state.get("token"))
+
+    def _oldest_age_seconds(self) -> float | None:
+        if not self.queue_path.exists():
+            return None
+        with sqlite3.connect(self.queue_path, timeout=5) as db:
+            row = db.execute("SELECT created_at FROM queue ORDER BY id LIMIT 1").fetchone()
+        if not row:
+            return None
+        try:
+            created = datetime.fromisoformat(row[0])
+        except ValueError:
+            return float(_FLUSH_AGE_SECONDS)
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        return max((datetime.now(timezone.utc) - created).total_seconds(), 0.0)
+
+    def should_flush(self) -> bool:
+        if self._queue_size() >= _BATCH_SIZE:
+            return True
+        age = self._oldest_age_seconds()
+        return age is not None and age >= _FLUSH_AGE_SECONDS
+
+    def _next_flush_delay(self) -> float:
+        age = self._oldest_age_seconds()
+        if age is None:
+            return float(_FLUSH_AGE_SECONDS)
+        return float(min(max(_FLUSH_AGE_SECONDS - age, 1.0), _FLUSH_AGE_SECONDS))
+
+    def status(self) -> dict[str, Any]:
+        consent = self.consent_status()
+        pending = self._queue_size() if consent else 0
+        age = self._oldest_age_seconds() if consent else None
+        return {
+            "enabled": self.enabled,
+            "consent": consent,
+            "registered": consent and self.is_registered(),
+            "pending": pending,
+            "oldest_age_seconds": None if age is None else int(age),
+            "last_upload": self.last_upload,
+        }
+
+    async def flush_now(self) -> dict[str, Any]:
+        """Register if needed and upload every queued event; records the result."""
+        sent = 0
+        ok = True
+        message = "没有待上传数据"
+        if not self.enabled or not self.consent_status():
+            ok, message = False, "未同意数据收集"
+        else:
+            try:
+                self._initialize_queue()
+                async with await self._make_client() as client:
+                    if not await self._ensure_registered(client):
+                        ok, message = False, "设备注册失败，稍后自动重试"
+                    else:
+                        for _ in range(_MAX_QUEUE_SIZE // _BATCH_SIZE + 1):
+                            batch = self._load_batch()
+                            if not batch:
+                                break
+                            self._increment_tries([row_id for row_id, _ in batch])
+                            result, delay = await self._send_rows(client, batch)
+                            if result == "retry":
+                                ok = False
+                                message = "服务器暂时不可用，稍后自动重试"
+                                self._retry_delay = delay
+                                break
+                            sent += len(batch)
+                        if ok and sent:
+                            message = f"已上传 {sent} 条"
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                ok, message = False, f"无法连接统计服务器（{type(error).__name__}）"
+                logger.warning("Telemetry flush failed", exc_info=True)
+        self.last_upload = {"at": _now(), "ok": ok, "sent": sent, "message": message}
+        pending = self._queue_size() if self.consent_status() else 0
+        return {**self.last_upload, "pending": pending}
+
     def emit(self, event: dict[str, Any]) -> None:
         """Queue one already-sanitized event without making a network request."""
         if not self.enabled or not self.consent_status():
             return
         try:
+            event = {**event, "schema_version": _SCHEMA_VERSION}
+            machine = self.machine_hash()
+            if machine:
+                event["machine_hash"] = machine
             self._initialize_queue()
             with sqlite3.connect(self.queue_path, timeout=5) as db:
                 db.execute(
@@ -454,7 +590,11 @@ class TelemetryService:
     async def _register(self, client: httpx.AsyncClient) -> bool:
         response = await client.post(
             "/v1/devices/register",
-            json={"consent": True, "app_version": _short(__version__)},
+            json={
+                "consent": True,
+                "app_version": _short(__version__),
+                "machine_hash": self.machine_hash(),
+            },
         )
         if response.status_code != 201:
             logger.warning("Telemetry device registration failed with HTTP %s", response.status_code)
@@ -560,32 +700,30 @@ class TelemetryService:
         )
 
     async def run(self) -> None:
-        """Drain batches in the background; no DB file is touched before consent."""
+        """Register right after consent; upload when 50 events are queued or the
+        oldest event is 180s old. No DB file is touched before consent."""
         self._stop = asyncio.Event()
-        interval = 180.0
         while not self._stop.is_set():
             if not self.enabled or not self.consent_status():
                 await self._wait(5)
                 continue
             try:
                 self._initialize_queue()
-                queued = self._queue_size()
-                if queued == 0:
-                    await self._wait(180)
-                    continue
-                if queued < _BATCH_SIZE:
-                    await self._wait(180)
-                    continue
-                batch = self._load_batch()
-                self._increment_tries([row_id for row_id, _ in batch])
-                async with await self._make_client() as client:
-                    result, delay = await self._send_rows(client, batch)
-                if result == "retry":
-                    self._attempts_since_success += 1
-                    base = delay or min(30 * (2 ** min(self._attempts_since_success - 1, 10)), _MAX_BACKOFF_SECONDS)
-                    interval = min(base * random.uniform(0.8, 1.2), _MAX_BACKOFF_SECONDS)
+                if not self.is_registered() or self.should_flush():
+                    self._retry_delay = None
+                    result = await self.flush_now()
+                    if result["ok"]:
+                        self._attempts_since_success = 0
+                        interval = 30.0 if self.should_flush() else self._next_flush_delay()
+                    else:
+                        self._attempts_since_success += 1
+                        base = getattr(self, "_retry_delay", None) or min(
+                            30 * (2 ** min(self._attempts_since_success - 1, 10)),
+                            _MAX_BACKOFF_SECONDS,
+                        )
+                        interval = min(base * random.uniform(0.8, 1.2), _MAX_BACKOFF_SECONDS)
                 else:
-                    interval = 30.0 if self._queue_size() >= _BATCH_SIZE else 180.0
+                    interval = self._next_flush_delay()
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -594,6 +732,15 @@ class TelemetryService:
                 base = min(30 * (2 ** min(self._attempts_since_success - 1, 10)), _MAX_BACKOFF_SECONDS)
                 interval = min(base * random.uniform(0.8, 1.2), _MAX_BACKOFF_SECONDS)
             await self._wait(interval)
+
+    async def shutdown_flush(self, timeout: float = 3.0) -> None:
+        """Best-effort upload of whatever is queued when the app exits."""
+        if not self.enabled or not self.consent_status() or self._queue_size() == 0:
+            return
+        try:
+            await asyncio.wait_for(self.flush_now(), timeout=timeout)
+        except (asyncio.TimeoutError, Exception):
+            logger.info("Telemetry shutdown flush did not finish; events stay queued")
 
     async def _wait(self, seconds: float) -> None:
         self._wake.clear()

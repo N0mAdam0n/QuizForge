@@ -26,10 +26,11 @@ class TelemetryPublicStats(BaseModel):
     active_devices_7d: int = Field(ge=0, strict=True)
     active_devices_30d: int = Field(ge=0, strict=True)
     total_events: int = Field(ge=0, strict=True)
+    total_users: int | None = Field(default=None, ge=0)
     generated_at: datetime
 
 
-@router.get("/stats/public", response_model=TelemetryPublicStats)
+@router.get("/stats/public", response_model=TelemetryPublicStats, response_model_exclude_none=True)
 async def read_public_telemetry_stats(
     _current_user: models.User = Depends(deps.get_current_active_superuser),
 ) -> TelemetryPublicStats:
@@ -70,3 +71,19 @@ async def update_telemetry_consent(
 ) -> dict[str, Any]:
     consent = telemetry.set_consent(payload.consent)
     return {"enabled": telemetry.enabled, "consent": consent}
+
+
+@router.get("/status")
+async def read_telemetry_status(
+    _current_user: models.User = Depends(deps.get_current_active_user),
+) -> dict[str, Any]:
+    return telemetry.status()
+
+
+@router.post("/upload")
+async def upload_telemetry_now(
+    _current_user: models.User = Depends(deps.get_current_active_user),
+) -> dict[str, Any]:
+    if not telemetry.consent_status():
+        raise HTTPException(status_code=409, detail="尚未同意数据收集")
+    return await telemetry.flush_now()
