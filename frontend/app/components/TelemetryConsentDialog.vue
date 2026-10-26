@@ -82,7 +82,6 @@ const loadStatus = async () => {
 }
 
 const accept = async () => {
-  if (!checked.value) return
   decision.value = 'accepted'
   if (token.value) await saveServerConsent()
   else open.value = false
@@ -145,34 +144,16 @@ onUnmounted(() => {
   <Dialog :open="open" @update:open="handleOpenChange">
     <DialogContent class="max-h-[90vh] max-w-2xl overflow-y-auto">
       <DialogHeader>
-        <DialogTitle>匿名使用数据收集声明</DialogTitle>
+        <DialogTitle>数据传输提示</DialogTitle>
         <DialogDescription>
-          {{ consent ? '当前后端实例已启用数据收集。' : '请阅读说明并自行选择是否同意。默认未勾选，不同意不影响软件使用。' }}
+          {{ consent ? '已同意数据传输。' : '不同意不影响使用。' }}
         </DialogDescription>
       </DialogHeader>
 
-      <div class="space-y-3 text-sm leading-6 text-muted-foreground">
-        <p>
-          <strong class="text-foreground">我们会收集：</strong>
-          仅在你同意后，收集软件版本、操作系统与语言设置，以及解析质量、题型和数量、处理耗时、练习正误与耗时、审核修改类别等匿名统计信息。题目和任务标识会在本机处理后以摘要形式上报，用于改进软件质量。
-        </p>
-        <p>
-          <strong class="text-foreground">我们不会收集：</strong>
-          不会通过这项统计上传题干、选项、答案、解析原文、导入文件内容或文件名，也不会收集姓名、联系方式等直接身份信息，或将剪贴板内容用于统计。服务器常规网络访问日志可能记录连接 IP。
-        </p>
-        <p>
-          <strong class="text-foreground">匿名机器标识：</strong>
-          为了统计真实用户人数（同一台电脑重装软件不重复计算），我们会读取本机 Windows 的机器码（MachineGuid），在本机用固定密钥做不可逆的 HMAC-SHA256 摘要后，仅上传这个摘要，不上传机器码原文。非 Windows 系统或读取失败时，改用本机随机生成的标识。该摘要会随注册信息和每条统计数据一起上传，用于把同一台电脑的数据关联起来。
-        </p>
-        <p>
-          是否同意由你决定，不同意不影响使用；同意后可随时从用户菜单中的“数据收集声明”撤回。
-        </p>
-      </div>
+      <p class="text-sm leading-6 text-muted-foreground">
+        为改进软件，我们会在后台上传匿名的使用与答题统计（不含题目原文和个人信息），并附带本机机器码的不可逆摘要用于统计使用人数。可随时在用户菜单“数据收集声明”中撤回。
+      </p>
 
-      <label v-if="!consent" class="flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm">
-        <input v-model="checked" type="checkbox" class="mt-1 size-4 accent-primary">
-        <span>我已阅读并同意上述匿名使用数据收集说明</span>
-      </label>
 
       <DialogFooter class="gap-2">
         <template v-if="consent">
@@ -180,8 +161,8 @@ onUnmounted(() => {
           <Button variant="destructive" :disabled="saving" @click="withdraw">撤回同意并清除数据</Button>
         </template>
         <template v-else>
-          <Button variant="outline" :disabled="saving" @click="decline">暂不同意</Button>
-          <Button :disabled="saving || !checked || !enabled" @click="accept">同意并开始收集</Button>
+          <Button variant="outline" :disabled="saving" @click="decline">不同意</Button>
+          <Button :disabled="saving || !enabled" @click="accept">同意</Button>
         </template>
       </DialogFooter>
     </DialogContent>

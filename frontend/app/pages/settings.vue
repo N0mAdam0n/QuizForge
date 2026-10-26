@@ -65,51 +65,6 @@ interface PublicTelemetryStats {
   generated_at: string
 }
 
-interface TelemetryUploadResult {
-  at: string
-  ok: boolean
-  sent: number
-  message: string
-}
-
-interface TelemetryStatus {
-  enabled: boolean
-  consent: boolean
-  registered: boolean
-  pending: number
-  oldest_age_seconds: number | null
-  last_upload: TelemetryUploadResult | null
-}
-
-const telemetryStatus = ref<TelemetryStatus | null>(null)
-const telemetryUploading = ref(false)
-
-const refreshTelemetryStatus = async () => {
-  try {
-    telemetryStatus.value = await $api<TelemetryStatus>('/telemetry/status')
-  } catch (error) {
-    console.debug('Could not read telemetry status', error)
-  }
-}
-
-const uploadTelemetryNow = async () => {
-  if (telemetryUploading.value) return
-  telemetryUploading.value = true
-  try {
-    const result = await $api<TelemetryUploadResult & { pending: number }>(
-      '/telemetry/upload',
-      { method: 'POST' },
-    )
-    if (result.ok) toast.success('上传完成', { description: result.message })
-    else toast.error('上传未完成', { description: result.message })
-  } catch (error) {
-    toast.error('上传失败', { description: (error as any).message })
-  } finally {
-    telemetryUploading.value = false
-    await refreshTelemetryStatus()
-  }
-}
-
 const publicTelemetryStats = useLocalStorage<PublicTelemetryStats | null>(
   'quizforge-public-telemetry-stats',
   null,
@@ -211,7 +166,6 @@ onMounted(() => {
   if (user.value?.is_superuser) {
     fetchSettings()
     void refreshPublicTelemetryStats()
-    void refreshTelemetryStatus()
   }
 })
 </script>
@@ -275,45 +229,10 @@ onMounted(() => {
         </div>
 
         <div v-else class="grid gap-6">
-          <Card v-if="telemetryStatus?.enabled">
-            <CardHeader class="flex flex-row items-start justify-between gap-4">
-              <div class="space-y-1">
-                <CardTitle class="text-base">数据上传</CardTitle>
-                <CardDescription>
-                  {{ telemetryStatus.consent ? '满 50 条或最早一条等待满 3 分钟时自动上传，退出时也会尝试上传。' : '尚未同意数据收集，不会上传任何数据。' }}
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                data-testid="telemetry-upload-now"
-                :disabled="telemetryUploading || !telemetryStatus.consent"
-                @click="uploadTelemetryNow"
-              >
-                <RefreshCw class="mr-2 size-4" :class="{ 'animate-spin': telemetryUploading }" />
-                立即上传
-              </Button>
-            </CardHeader>
-            <CardContent class="space-y-1 text-sm text-muted-foreground">
-              <p>
-                待上传：<span class="font-medium text-foreground tabular-nums">{{ telemetryStatus.pending }}</span> 条
-                · 设备{{ telemetryStatus.registered ? '已注册' : '未注册' }}
-              </p>
-              <p v-if="telemetryStatus.last_upload">
-                上次上传：{{ new Date(telemetryStatus.last_upload.at).toLocaleString() }}
-                · <span :class="telemetryStatus.last_upload.ok ? 'text-green-600' : 'text-destructive'">{{ telemetryStatus.last_upload.message }}</span>
-              </p>
-              <p v-else>本次启动后还没有上传记录。</p>
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader class="flex flex-row items-start justify-between gap-4">
               <div class="space-y-1">
-                <CardTitle class="text-base">累计参与安装数</CardTitle>
-                <CardDescription>
-                  全项目汇总，仅统计明确同意参与的安装；不代表独立自然人数。
-                </CardDescription>
+                <CardTitle class="text-base">使用人数</CardTitle>
               </div>
               <Button
                 variant="outline"
@@ -328,19 +247,9 @@ onMounted(() => {
                 刷新
               </Button>
             </CardHeader>
-            <CardContent class="space-y-2">
+            <CardContent>
               <p class="text-4xl font-semibold tabular-nums">
-                {{ publicTelemetryStats ? publicTelemetryStats.total_devices.toLocaleString() : '—' }}
-              </p>
-              <p v-if="publicTelemetryStats" class="text-sm text-muted-foreground">
-                <template v-if="publicTelemetryStats.total_users != null">
-                  独立用户（按机器）：{{ publicTelemetryStats.total_users.toLocaleString() }} ·
-                </template>
-                近 30 天活跃安装：{{ publicTelemetryStats.active_devices_30d.toLocaleString() }}
-                · 统计时间：{{ new Date(publicTelemetryStats.generated_at).toLocaleString() }}
-              </p>
-              <p v-else class="text-sm text-muted-foreground">
-                暂无缓存数据；统计服务不可用时会自动重试，不影响其他功能。
+                {{ publicTelemetryStats?.total_users != null ? publicTelemetryStats.total_users.toLocaleString() : '—' }}
               </p>
             </CardContent>
           </Card>
