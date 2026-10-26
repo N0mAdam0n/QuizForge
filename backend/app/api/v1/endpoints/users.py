@@ -19,6 +19,8 @@ from app.schemas.subject_member import MyPermissions, SubjectMembershipMini
 from app.core import security
 from app.services import user_import_service
 
+from app.schemas.preferences import UserNicknameUpdate, UserPreferences, UserPreferencesUpdate
+
 router = APIRouter()
 
 MAX_IMPORT_SIZE = 5 * 1024 * 1024  # 5 MB
@@ -139,6 +141,43 @@ async def update_user_me(
         
     user = await crud_user.user.update(session, db_obj=current_user, obj_in=user_in)
     return user
+
+@router.get("/me/preferences", response_model=UserPreferences)
+async def read_my_preferences(
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    return UserPreferences.model_validate(current_user.preferences or {})
+
+
+@router.put("/me/preferences", response_model=UserPreferences)
+async def update_my_preferences(
+    *,
+    session: deps.SessionDep,
+    body: UserPreferencesUpdate,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    merged = UserPreferences.model_validate(current_user.preferences or {}).model_dump()
+    merged.update(body.model_dump(exclude_none=True))
+    current_user.preferences = UserPreferences.model_validate(merged).model_dump()
+    session.add(current_user)
+    await session.commit()
+    await session.refresh(current_user)
+    return UserPreferences.model_validate(current_user.preferences)
+
+
+@router.put("/me/nickname", response_model=User)
+async def update_my_nickname(
+    *,
+    session: deps.SessionDep,
+    body: UserNicknameUpdate,
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    current_user.full_name = body.full_name.strip()
+    session.add(current_user)
+    await session.commit()
+    await session.refresh(current_user)
+    return current_user
+
 
 @router.put("/me/last-subject", response_model=User)
 async def update_last_subject_me(

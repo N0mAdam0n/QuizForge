@@ -32,7 +32,7 @@ class TelemetryPublicStats(BaseModel):
 
 @router.get("/stats/public", response_model=TelemetryPublicStats, response_model_exclude_none=True)
 async def read_public_telemetry_stats(
-    _current_user: models.User = Depends(deps.get_current_active_superuser),
+    _current_user: models.User = Depends(deps.get_current_active_user),
 ) -> TelemetryPublicStats:
     try:
         data = await telemetry.fetch_public_stats()

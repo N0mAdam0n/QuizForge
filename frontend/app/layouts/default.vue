@@ -15,6 +15,8 @@ const {
 const ignoredVersion = useLocalStorage('ignored-update-version', '')
 const hasPrompted = useSessionStorage('update-prompted', false)
 const isMobile = useMediaQuery('(max-width: 768px)')
+const { preferences, load: loadPreferences } = usePreferences()
+useApplyPreferences()
 
 // 普通用户未被分配任何学科时的空状态提示(管理员不受限)。
 const showNoSubjectHint = computed(
@@ -26,6 +28,11 @@ onMounted(async () => {
   if (token.value) {
     await fetchUser()
   }
+  if (token.value) {
+    await loadPreferences()
+  }
+  // 用户可在设置中关闭启动时自动检查更新
+  if (!preferences.value.auto_check_update) return
   // 让所有登录用户都能检查更新，以便进行对应权限的弹窗提示
   await checkUpdate()
   

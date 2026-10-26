@@ -266,7 +266,7 @@ async def test_public_stats_fetches_only_aggregate_data_without_device_token(tmp
 
 
 @pytest.mark.asyncio
-async def test_public_stats_api_is_admin_only_and_ignores_unknown_fields(
+async def test_public_stats_api_is_open_to_active_users_and_ignores_unknown_fields(
     client,
     db_session,
     monkeypatch,
@@ -311,7 +311,8 @@ async def test_public_stats_api_is_admin_only_and_ignores_unknown_fields(
         headers={"Authorization": f"Bearer {create_access_token(subject=admin_user.id)}"},
     )
 
-    assert regular_response.status_code == 400
+    assert regular_response.status_code == 200
+    assert regular_response.json() == admin_response.json()
     assert admin_response.status_code == 200
     assert admin_response.json() == {
         "total_devices": 128,

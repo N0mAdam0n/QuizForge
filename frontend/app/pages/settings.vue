@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, watchEffect } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
-import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-import { Settings, Cpu, MessageSquareText, UserPlus, RefreshCw } from '@lucide/vue'
+import { Settings, Cpu, MessageSquareText, ShieldCheck, RefreshCw } from '@lucide/vue'
 import PageHeader from '~/components/PageHeader.vue'
 import AiSettings from '~/components/AiSettings.vue'
 import AiPromptsConfig from '~/components/AiPromptsConfig.vue'
+import UserGeneralSettings from '~/components/UserGeneralSettings.vue'
 import {
   Card,
   CardContent,
@@ -22,8 +22,7 @@ import { Label } from '@/components/ui/label'
 
 const { $api } = useNuxtApp()
 const { user } = useAuth()
-const { permissions, isAdmin, isManagerSomewhere } = usePermissions()
-const router = useRouter()
+const { permissions, isAdmin } = usePermissions()
 
 // Navigation State
 const activeTab = ref('general')
@@ -31,12 +30,11 @@ const updateActiveTab = (tab: string) => {
   activeTab.value = tab
 }
 
+// 所有登录用户都可进入设置页；AI 配置与系统管理仅管理员可见。
 watchEffect(() => {
   if (!user.value || !permissions.value) return
-  if (!isAdmin.value && !isManagerSomewhere.value) {
-    router.push('/')
-  } else if (!isAdmin.value) {
-    activeTab.value = 'prompts'
+  if (!isAdmin.value && (activeTab.value === 'ai' || activeTab.value === 'system')) {
+    activeTab.value = 'general'
   }
 })
 
@@ -76,7 +74,7 @@ const publicTelemetryStatsFetchedAt = useLocalStorage(
 const publicTelemetryStatsLoading = ref(false)
 
 const refreshPublicTelemetryStats = async (force = false) => {
-  if (!isAdmin.value || publicTelemetryStatsLoading.value) return
+  if (publicTelemetryStatsLoading.value) return
   if (
     !force
     && Date.now() - publicTelemetryStatsFetchedAt.value < 10 * 60 * 1000
@@ -163,22 +161,21 @@ const updateSetting = async (setting: SystemSetting) => {
 }
 
 onMounted(() => {
+  void refreshPublicTelemetryStats()
   if (user.value?.is_superuser) {
     fetchSettings()
-    void refreshPublicTelemetryStats()
   }
 })
 </script>
 
 <template>
-  <PageHeader :title="isAdmin ? '系统设置' : '提示词配置'" />
+  <PageHeader :title="isAdmin ? '系统设置' : '设置'" />
   
   <div class="flex flex-col md:flex-row max-w-7xl mx-auto w-full items-stretch min-h-[calc(100vh-4rem)]">
     <!-- Left Sidebar Navigation -->
     <aside class="w-full md:w-56 shrink-0 md:border-r border-border p-4 md:pr-6 md:pt-8 bg-muted/20 md:bg-transparent">
       <nav class="flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-2 md:pb-0 md:sticky md:top-8">
         <Button
-          v-if="isAdmin"
           :variant="activeTab === 'general' ? 'secondary' : 'ghost'" 
           class="justify-start gap-2 whitespace-nowrap lg:w-full"
           @click="updateActiveTab('general')"
@@ -205,12 +202,12 @@ onMounted(() => {
         </Button>
         <Button
           v-if="isAdmin"
-          :variant="activeTab === 'registration' ? 'secondary' : 'ghost'" 
+          :variant="activeTab === 'system' ? 'secondary' : 'ghost'" 
           class="justify-start gap-2 whitespace-nowrap lg:w-full"
-          @click="updateActiveTab('registration')"
+          @click="updateActiveTab('system')"
         >
-          <UserPlus class="w-4 h-4" />
-          注册设置
+          <ShieldCheck class="w-4 h-4" />
+          系统管理
         </Button>
       </nav>
     </aside>
@@ -221,14 +218,10 @@ onMounted(() => {
       <div v-show="activeTab === 'general'" class="space-y-6">
         <div class="mb-4">
           <h2 class="text-2xl font-bold tracking-tight">常规设置</h2>
-          <p class="text-sm text-muted-foreground">管理系统的全局环境变量与基础配置。</p>
+          <p class="text-sm text-muted-foreground">个人偏好设置，仅对你自己的账户生效。</p>
         </div>
 
-        <div v-if="loading" class="flex justify-center py-8">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-
-        <div v-else class="grid gap-6">
+        <div class="grid gap-6">
           <Card>
             <CardHeader class="flex flex-row items-start justify-between gap-4">
               <div class="space-y-1">
@@ -254,6 +247,67 @@ onMounted(() => {
             </CardContent>
           </Card>
 
+          <UserGeneralSettings />
+        </div>
+      </div>
+
+      <!-- AI Settings -->
+      <div v-if="isAdmin" v-show="activeTab === 'ai'">
+        <div class="mb-6">
+          <h2 class="text-2xl font-bold tracking-tight">AI 大脑核心</h2>
+          <p class="text-sm text-muted-foreground">分配提供商、录入模型，并配置系统各场景下的主力计算引擎。</p>
+        </div>
+        <AiSettings />
+      </div>
+
+      <!-- AI Prompts -->
+      <div v-show="activeTab === 'prompts'">
+        <div class="mb-6">
+          <h2 class="text-2xl font-bold tracking-tight">提示词配置</h2>
+          <p class="text-sm text-muted-foreground">如果您了解大语言工作原理，可在此微调它处理指令的方式。</p>
+        </div>
+        <AiPromptsConfig />
+      </div>
+
+      <!-- Registration Settings -->
+      <div v-if="isAdmin" v-show="activeTab === 'system'" class="space-y-6">
+        <div class="mb-4">
+          <h2 class="text-2xl font-bold tracking-tight">系统管理</h2>
+          <p class="text-sm text-muted-foreground">注册策略与系统全局配置，仅管理员可见。</p>
+        </div>
+
+        <Card>
+          <CardContent class="pt-6 space-y-6">
+            <div class="flex items-center justify-between gap-4">
+              <div class="space-y-0.5">
+                <Label class="text-base">开放自助注册</Label>
+                <p class="text-sm text-muted-foreground">开启后，登录页将显示注册入口，访客可自行创建账户。</p>
+              </div>
+              <Switch
+                :model-value="registrationEnabled"
+                :disabled="registrationSaving"
+                @update:model-value="onToggleRegistration"
+              />
+            </div>
+
+            <div class="flex items-center justify-between gap-4">
+              <div class="space-y-0.5">
+                <Label class="text-base">注册需管理员审核</Label>
+                <p class="text-sm text-muted-foreground">开启后，新注册用户默认停用，需管理员在用户管理中启用后方可登录。</p>
+              </div>
+              <Switch
+                :model-value="registrationRequiresApproval"
+                :disabled="registrationSaving || !registrationEnabled"
+                @update:model-value="onToggleApproval"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div v-if="loading" class="flex justify-center py-8">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+        <div v-else class="grid gap-6">
           <Card v-for="setting in settings" :key="setting.key">
             <CardHeader>
               <CardTitle class="text-base">{{ setting.key }}</CardTitle>
@@ -288,60 +342,6 @@ onMounted(() => {
             <p class="text-sm text-muted-foreground mt-1">系统尚未注册任何开放配置项</p>
           </div>
         </div>
-      </div>
-
-      <!-- AI Settings -->
-      <div v-show="activeTab === 'ai'">
-        <div class="mb-6">
-          <h2 class="text-2xl font-bold tracking-tight">AI 大脑核心</h2>
-          <p class="text-sm text-muted-foreground">分配提供商、录入模型，并配置系统各场景下的主力计算引擎。</p>
-        </div>
-        <AiSettings />
-      </div>
-
-      <!-- AI Prompts -->
-      <div v-show="activeTab === 'prompts'">
-        <div class="mb-6">
-          <h2 class="text-2xl font-bold tracking-tight">提示词配置</h2>
-          <p class="text-sm text-muted-foreground">如果您了解大语言工作原理，可在此微调它处理指令的方式。</p>
-        </div>
-        <AiPromptsConfig />
-      </div>
-
-      <!-- Registration Settings -->
-      <div v-show="activeTab === 'registration'" class="space-y-6">
-        <div class="mb-4">
-          <h2 class="text-2xl font-bold tracking-tight">注册设置</h2>
-          <p class="text-sm text-muted-foreground">控制是否允许访客自助注册账户。</p>
-        </div>
-
-        <Card>
-          <CardContent class="pt-6 space-y-6">
-            <div class="flex items-center justify-between gap-4">
-              <div class="space-y-0.5">
-                <Label class="text-base">开放自助注册</Label>
-                <p class="text-sm text-muted-foreground">开启后，登录页将显示注册入口，访客可自行创建账户。</p>
-              </div>
-              <Switch
-                :model-value="registrationEnabled"
-                :disabled="registrationSaving"
-                @update:model-value="onToggleRegistration"
-              />
-            </div>
-
-            <div class="flex items-center justify-between gap-4">
-              <div class="space-y-0.5">
-                <Label class="text-base">注册需管理员审核</Label>
-                <p class="text-sm text-muted-foreground">开启后，新注册用户默认停用，需管理员在用户管理中启用后方可登录。</p>
-              </div>
-              <Switch
-                :model-value="registrationRequiresApproval"
-                :disabled="registrationSaving || !registrationEnabled"
-                @update:model-value="onToggleApproval"
-              />
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </main>
   </div>

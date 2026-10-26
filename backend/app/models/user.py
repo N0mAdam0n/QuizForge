@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import JSON, Boolean, Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from app.models.base import Base
 
@@ -19,6 +19,9 @@ class User(Base):
 
     # 用户最后选择的工作学科（全局学科上下文，用于跨设备恢复）
     last_active_subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)
+
+    # 用户个人偏好（练习、外观、更新等），缺省值由 schemas.preferences 补齐
+    preferences = Column(JSON, nullable=True)
 
     chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
     activity_logs = relationship("ActivityLog", back_populates="user")

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { AlertCircle, ArrowLeft, ArrowRight, Check, CircleHelp, Lock, RotateCcw, Shuffle, Users } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 import AnswerDisplay from '@/components/AnswerDisplay.vue'
@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import RichContent from '@/components/rich-editor/RichContent.vue'
 import type { AnswerSpec, OptionSpec, QuestionType, RichDoc } from '@/types'
 import { collectBlankIds } from '@/components/rich-editor/richDoc'
+import { formatDuration, seededShuffle, summarizeSession } from '~/utils/practiceSession'
 
 definePageMeta({ layout: 'default' })
 
@@ -55,6 +56,7 @@ interface PracticeAnswerResult {
 }
 
 const { $api } = useNuxtApp()
+const { preferences, load: loadPreferences } = usePreferences()
 const telemetryConsent = useState<boolean>('telemetry-consent', () => false)
 const { currentSubjectId, currentSubject, subjects, init: initSubject } = useSubjectContext()
 
@@ -134,6 +136,32 @@ let autoAdvanceTimer: ReturnType<typeof setTimeout> | null = null
 let questionStartedAt = Date.now()
 const practiceSessionId = ref<string | null>(null)
 
+// ---- 偏好：计时提示 / 选项乱序 / 解析显示，以及本次练习结束后的正确率汇总 ----
+const questionShownAt = ref(Date.now())
+const sessionStartedAt = ref<number | null>(null)
+const sessionEndedAt = ref<number | null>(null)
+const nowTick = ref(Date.now())
+let tickTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  tickTimer = setInterval(() => { nowTick.value = Date.now() }, 1000)
+})
+onBeforeUnmount(() => {
+  if (tickTimer !== null) clearInterval(tickTimer)
+})
+const revealedExplanations = ref<Record<number, boolean>>({})
+const explanationVisible = computed(() => {
+  const id = currentQuestion.value?.id
+  return preferences.value.show_explanation_immediately || (id != null && !!revealedExplanations.value[id])
+})
+const questionElapsed = computed(() => formatDuration(nowTick.value - questionShownAt.value))
+const shuffleSeed = ref(1)
+const displayedOptions = computed(() => {
+  const question = currentQuestion.value
+  if (!question) return []
+  if (!preferences.value.shuffle_options) return question.options
+  return seededShuffle(question.options, question.id * 7919 + shuffleSeed.value)
+})
+
 const newPracticeSessionId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
   const bytes = new Uint8Array(16)
@@ -178,6 +206,7 @@ watch(currentQuestion, (question, previousQuestion) => {
   }
   resetAnswer(question)
   questionStartedAt = Date.now()
+  questionShownAt.value = Date.now()
 }, { immediate: true })
 
 const startPractice = async () => {
@@ -196,13 +225,15 @@ const startPractice = async () => {
   practiceSubjectId.value = currentSubjectId.value
   practiceBankId.value = selectedBankId.value
   practiceSessionId.value = newPracticeSessionId()
+  sessionStartedAt.value = Date.now()
+  sessionEndedAt.value = null
   try {
     const query: Record<string, string | number> = {
       subject_id: practiceSubjectId.value,
       scope: practiceScope.value,
       import_task_id: practiceBankId.value,
       mode: mode.value,
-      limit: 20,
+      limit: preferences.value.questions_per_round,
       offset: questionOffset.value,
     }
     if (mode.value === 'type') query.q_type = selectedType.value
@@ -345,7 +376,7 @@ const loadMoreQuestions = async (): Promise<boolean> => {
       scope: practiceScope.value,
       import_task_id: practiceBankId.value,
       mode: questionSet.value.mode,
-      limit: 20,
+      limit: preferences.value.questions_per_round,
       offset: questionSet.value.next_offset,
     }
     if (questionSet.value.mode === 'type') query.q_type = selectedType.value
@@ -436,8 +467,52 @@ const incorrectCount = computed(
   () => Object.values(answerResults.value).filter((result) => result.is_correct === false).length,
 )
 
+const isCompleted = computed(
+  () => !!questionSet.value && totalQuestions.value > 0 && questionIndex.value >= totalQuestions.value,
+)
+watch(isCompleted, (done) => {
+  if (done && sessionEndedAt.value === null) sessionEndedAt.value = Date.now()
+})
+const sessionSummary = computed(() => summarizeSession(Object.values(answerResults.value)))
+const sessionDuration = computed(() => {
+  if (sessionStartedAt.value === null) return '—'
+  return formatDuration((sessionEndedAt.value ?? nowTick.value) - sessionStartedAt.value)
+})
+const sessionWrongQuestions = computed(
+  () => questionSet.value?.questions.filter((q) => answerResults.value[q.id]?.is_correct === false) ?? [],
+)
+
+/** 只重练本次答错的题目（不重新请求后端）。 */
+const retryWrongQuestions = () => {
+  const wrong = sessionWrongQuestions.value
+  if (!questionSet.value || wrong.length === 0) return
+  clearAutoAdvanceTimer()
+  questionSet.value = {
+    ...questionSet.value,
+    questions: [...wrong],
+    total_count: wrong.length,
+    has_more: false,
+  }
+  for (const q of wrong) {
+    delete answerResults.value[q.id]
+    delete submittedAnswers.value[q.id]
+    delete answerDrafts.value[q.id]
+    delete revealedExplanations.value[q.id]
+  }
+  answerResults.value = {}
+  questionIndex.value = 0
+  practiceSessionId.value = newPracticeSessionId()
+  sessionStartedAt.value = Date.now()
+  sessionEndedAt.value = null
+  shuffleSeed.value += 1
+  resetAnswer(wrong[0])
+}
+
 const restartPractice = () => {
   clearAutoAdvanceTimer()
+  revealedExplanations.value = {}
+  sessionStartedAt.value = null
+  sessionEndedAt.value = null
   questionSet.value = null
   questionIndex.value = 0
   questionOffset.value = 0
@@ -499,6 +574,11 @@ const submittedAnswerSummary = computed(() => {
 
 await initSubject()
 await loadBanks()
+await loadPreferences()
+if (preferences.value.default_mode) mode.value = preferences.value.default_mode
+if (['20', '40', '60', '80', '100'].includes(String(preferences.value.questions_per_round))) {
+  randomCount.value = String(preferences.value.questions_per_round)
+}
 </script>
 
 <template>
@@ -670,6 +750,9 @@ await loadBanks()
           </div>
           <div class="flex items-center gap-2">
             <Badge variant="outline">{{ modeLabels[questionSet!.mode] }}</Badge>
+            <span v-if="preferences.timer_hint && !answerResult" class="text-sm tabular-nums text-muted-foreground" aria-label="本题用时">
+              ⏱ {{ questionElapsed }}
+            </span>
             <span class="text-sm tabular-nums text-muted-foreground">
               {{ questionIndex + 1 }} / {{ answerSheetCount }}
             </span>
@@ -706,7 +789,7 @@ await loadBanks()
 
               <div v-if="currentQuestion.q_type === 'single_choice' || currentQuestion.q_type === 'multiple_choice'" class="space-y-2">
                 <button
-                  v-for="option in currentQuestion.options"
+                  v-for="option in displayedOptions"
                   :key="option.id"
                   type="button"
                   class="flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 sm:p-4"
@@ -766,7 +849,17 @@ await loadBanks()
                   <span v-if="answerResult.score !== null && currentQuestion.q_type === 'fill_in_the_blank'">
                     得分 {{ Math.round(answerResult.score * 100) }}%
                   </span>
-                  <div class="mt-3 space-y-2">
+                  <Button
+                    v-if="!explanationVisible"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    class="mt-3"
+                    @click="revealedExplanations[currentQuestion.id] = true"
+                  >
+                    查看参考答案与解析
+                  </Button>
+                  <div v-else class="mt-3 space-y-2">
                     <div class="font-medium">参考答案</div>
                     <AnswerDisplay :answer="answerResult.correct_answer" :options="currentQuestion.options" />
                     <div v-if="answerResult.analysis" class="border-t pt-2">
@@ -925,7 +1018,33 @@ await loadBanks()
           <h2 class="font-semibold">本组练习已完成</h2>
           <p class="text-sm text-muted-foreground">答题记录已保存；你可以重新选择练习方式继续。</p>
         </div>
-        <Button variant="outline" @click="restartPractice">返回练习选择</Button>
+        <div class="mx-auto grid max-w-md grid-cols-3 gap-3 rounded-lg border bg-muted/30 p-4">
+          <div>
+            <div class="text-2xl font-semibold tabular-nums">
+              {{ sessionSummary.accuracy === null ? '—' : `${sessionSummary.accuracy}%` }}
+            </div>
+            <div class="text-xs text-muted-foreground">本次正确率</div>
+          </div>
+          <div>
+            <div class="text-2xl font-semibold tabular-nums">
+              {{ sessionSummary.correct }} / {{ sessionSummary.correct + sessionSummary.incorrect }}
+            </div>
+            <div class="text-xs text-muted-foreground">答对 / 已判分</div>
+          </div>
+          <div>
+            <div class="text-2xl font-semibold tabular-nums">{{ sessionDuration }}</div>
+            <div class="text-xs text-muted-foreground">用时</div>
+          </div>
+        </div>
+        <p v-if="sessionSummary.ungraded" class="text-xs text-muted-foreground">
+          另有 {{ sessionSummary.ungraded }} 题未判分，不计入正确率。
+        </p>
+        <div class="flex flex-wrap justify-center gap-2">
+          <Button v-if="sessionWrongQuestions.length" @click="retryWrongQuestions">
+            <RotateCcw class="mr-2 h-4 w-4" />重练本次错题（{{ sessionWrongQuestions.length }}）
+          </Button>
+          <Button variant="outline" @click="restartPractice">返回练习选择</Button>
+        </div>
       </CardContent>
     </Card>
   </main>

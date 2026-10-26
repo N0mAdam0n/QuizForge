@@ -3,8 +3,13 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+import csv
+import io
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func, select
+from fastapi.responses import Response
+from sqlalchemy import case, delete, func, select
 
 from app.api import deps
 from app.core.permissions import Permission, can
@@ -858,3 +863,62 @@ async def submit_practice_answer(
         analysis=analysis if isinstance(analysis, dict) else None,
         dont_know=submission.dont_know,
     )
+
+
+_HISTORY_FIELDS = ["id", "question_id", "subject_id", "mode", "submitted_answer", "is_correct", "score", "created_at"]
+
+
+@router.get("/history/export")
+async def export_my_practice_history(
+    db: deps.SessionDep,
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Response:
+    """导出当前用户自己的作答记录（只含本人数据）。"""
+    rows = (await db.execute(
+        select(PracticeAttempt).where(PracticeAttempt.user_id == current_user.id)
+        .order_by(PracticeAttempt.id)
+    )).scalars().all()
+    records = [
+        {
+            "id": r.id,
+            "question_id": r.question_id,
+            "subject_id": r.subject_id,
+            "mode": r.mode,
+            "submitted_answer": r.submitted_answer,
+            "is_correct": r.is_correct,
+            "score": r.score,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+    if format == "json":
+        return Response(
+            json.dumps(records, ensure_ascii=False, indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=practice-history.json"},
+        )
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_HISTORY_FIELDS)
+    writer.writeheader()
+    for record in records:
+        writer.writerow({**record, "submitted_answer": json.dumps(record["submitted_answer"], ensure_ascii=False)})
+    return Response(
+        "\ufeff" + buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=practice-history.csv"},
+    )
+
+
+@router.delete("/history")
+async def clear_my_practice_history(
+    db: deps.SessionDep,
+    confirm: str = Query(..., description="must be CLEAR"),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> dict[str, int]:
+    """清空当前用户自己的作答记录；错题本不受影响。"""
+    if confirm != "CLEAR":
+        raise HTTPException(status_code=400, detail="需要确认")
+    result = await db.execute(delete(PracticeAttempt).where(PracticeAttempt.user_id == current_user.id))
+    await db.commit()
+    return {"deleted": result.rowcount or 0}
