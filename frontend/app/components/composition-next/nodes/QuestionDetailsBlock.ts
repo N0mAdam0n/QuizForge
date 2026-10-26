@@ -27,6 +27,6 @@ export const QuestionDetailsBlock = Node.create({
   },
 
   addNodeView() {
-    return VueNodeViewRenderer(ModuleBlockView)
+    return VueNodeViewRenderer(ModuleBlockView as unknown as Parameters<typeof VueNodeViewRenderer>[0])
   },
 })

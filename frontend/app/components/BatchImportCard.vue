@@ -30,7 +30,7 @@ const fetchQuestions = async () => {
         size: 100
       }
     })
-    questions.value = data.items
+    questions.value = (data as { items: typeof questions.value }).items
   } catch (e) {
     toast.error('加载题目详情失败')
   } finally {

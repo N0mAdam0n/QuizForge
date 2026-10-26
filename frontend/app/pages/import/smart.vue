@@ -234,8 +234,9 @@ const handlePaste = async (e: ClipboardEvent) => {
     if (!items) return
 
     for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-            const blob = items[i].getAsFile()
+        const item = items[i]!
+        if (item.type.indexOf('image') !== -1) {
+            const blob = item.getAsFile()
             if (blob) {
                 file.value = new File([blob], 'pasted-image.png', { type: blob.type })
                 // Create preview URL

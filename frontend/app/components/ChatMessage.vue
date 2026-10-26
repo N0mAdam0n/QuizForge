@@ -61,7 +61,7 @@ const generateFilename = (content: string) => {
     let title = 'export'
     const headingMatch = content.match(/^#+\s+(.+)$/m)
     if (headingMatch) {
-        title = headingMatch[1].trim()
+        title = headingMatch[1]!.trim()
     } else {
         const firstLine = content.split('\n').find(line => line.trim().length > 0)
         if (firstLine) title = firstLine.trim()
@@ -123,14 +123,14 @@ const parseMessage = (content: string) => {
     const linkMatches = [...content.matchAll(linkRegex)]
     if (linkMatches.length > 0) {
         text = text.replace(linkRegex, '')
-        linkMatches.forEach(m => questionIds.push(m[1]))
+        linkMatches.forEach(m => questionIds.push(m[1]!))
     }
 
     // Parse CONFIRM_IMPORT
     const confirmMatches = [...content.matchAll(confirmRegex)]
     if (confirmMatches.length > 0) {
         text = text.replace(confirmRegex, '')
-        confirmMatches.forEach(m => confirmIds.push(parseInt(m[1])))
+        confirmMatches.forEach(m => confirmIds.push(parseInt(m[1]!)))
     }
 
     // Parse CONFIRM_IMPORT_BATCH
@@ -138,7 +138,7 @@ const parseMessage = (content: string) => {
     if (batchMatches.length > 0) {
         text = text.replace(batchConfirmRegex, '')
         batchMatches.forEach(m => {
-            const ids = m[1].split(',').map(id => parseInt(id.trim()))
+            const ids = m[1]!.split(',').map(id => parseInt(id.trim()))
             batchConfirmIds.push(...ids)
         })
     }
@@ -240,8 +240,8 @@ const copyContent = () => {
         </div>
         <div v-else class="overflow-x-auto">
             <template v-for="(part, index) in parts" :key="index">
-                <MarkdownPreview v-if="part.type === 'text'" :content="part.content" />
-                <SvgRenderer v-else :code="part.content" />
+                <MarkdownPreview v-if="part.type === 'text'" :content="part.content ?? ''" />
+                <SvgRenderer v-else :code="part.content ?? ''" />
             </template>
             
             <!-- Question Link -->

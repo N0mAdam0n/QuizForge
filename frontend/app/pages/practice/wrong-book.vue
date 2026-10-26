@@ -55,7 +55,7 @@ const loadWrongBook = async (reset = true) => {
     hasMore.value = page.length === pageSize
   } catch (cause: any) {
     error.value = cause?.data?.detail || cause?.message || '读取错题本失败'
-    toast.error('读取错题本失败', { description: error.value })
+    toast.error('读取错题本失败', { description: error.value ?? undefined })
   } finally {
     loading.value = false
   }

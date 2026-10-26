@@ -64,7 +64,7 @@ const validateAndSet = (f: File): boolean => {
 const handleFileChange = (e: Event) => {
   const target = e.target as HTMLInputElement
   if (target.files && target.files.length > 0) {
-    validateAndSet(target.files[0])
+    validateAndSet(target.files[0]!)
   }
 }
 

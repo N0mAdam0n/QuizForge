@@ -181,7 +181,7 @@ const deleteQuestion = async (question: Question) => {
                 <Badge :variant="bank.publication_status === 'published' ? 'default' : 'secondary'">
                   {{ bank.publication_status === 'published' ? '已发布' : bank.scope === 'personal' ? '待发布' : '待审核' }}
                 </Badge>
-                <Select :model-value="bank.scope" :disabled="!bank.can_edit" @update:model-value="changeScope">
+                <Select :model-value="bank.scope" :disabled="!bank.can_edit" @update:model-value="(v) => changeScope(String(v))">
                   <SelectTrigger class="h-7 w-[120px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="personal">个人空间</SelectItem>

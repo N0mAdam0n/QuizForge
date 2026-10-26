@@ -31,6 +31,6 @@ export const QuestionBlock = Node.create({
   },
 
   addNodeView() {
-    return VueNodeViewRenderer(QuestionBlockView)
+    return VueNodeViewRenderer(QuestionBlockView as unknown as Parameters<typeof VueNodeViewRenderer>[0])
   },
 })

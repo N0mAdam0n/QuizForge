@@ -48,7 +48,7 @@ const fetchSubjects = async () => {
   try {
     availableSubjects.value = await $api<Subject[]>('/subjects')
     if (subjects.value.length && !selectedSubjectId.value) {
-      selectedSubjectId.value = String(subjects.value[0].id)
+      selectedSubjectId.value = String(subjects.value[0]!.id)
     }
   } catch (error) {
     toast.error('获取学科失败', { description: (error as any).message })
@@ -113,7 +113,7 @@ const reset = async (p: SubjectPrompt) => {
 watch(selectedSubjectId, fetchPrompts)
 watch(subjects, (manageable) => {
   if (manageable.some(subject => String(subject.id) === selectedSubjectId.value)) return
-  selectedSubjectId.value = manageable.length ? String(manageable[0].id) : ''
+  selectedSubjectId.value = manageable.length ? String(manageable[0]!.id) : ''
 })
 
 onMounted(async () => {

@@ -64,7 +64,7 @@ export const ResizableImage = Image.extend({
     addNodeView() {
         const base = this.parent?.()
         if (!base) {
-            return base
+            return null
         }
         return (props) => {
             const nodeView = base(props)

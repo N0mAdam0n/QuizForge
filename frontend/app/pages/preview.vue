@@ -62,7 +62,6 @@ const loadFile = async () => {
           experimental: false,
           trimXmlDeclaration: true,
           useBase64URL: false,
-          useMathMLPolyfill: false,
           debug: false,
         })
       }

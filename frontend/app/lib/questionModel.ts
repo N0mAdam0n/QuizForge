@@ -146,6 +146,7 @@ export function dbQuestionToDraft(
         visibility: (q.visibility ?? 'public') as 'public' | 'private',
         options,
         answer: q.answer ? (JSON.parse(JSON.stringify(q.answer)) as AnswerSpec) : null,
+        thinking: cloneRich(q.thinking),
         analysis: cloneRich(q.analysis),
         summary: cloneRich(q.summary),
         source: q.source ?? '',
@@ -374,7 +375,7 @@ function validateFillBlanks(answer: FillBlankAnswer, stem: RichDoc, requireCompl
     }
     if (requireComplete) {
         for (let i = 0; i < answer.blanks.length; i++) {
-            const accept = answer.blanks[i].accept.filter((a) => !isRichEmpty(a))
+            const accept = answer.blanks[i]!.accept.filter((a) => !isRichEmpty(a))
             if (accept.length === 0) {
                 return `第 ${i + 1} 空至少需要一个参考答案`
             }

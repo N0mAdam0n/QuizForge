@@ -34,11 +34,11 @@ export function applyChatMessageMeta<T extends HasBackendId>(
 ): boolean {
     if (messages.length === 0) return false
     if (meta.role === 'user' && messages.length >= 2) {
-        messages[messages.length - 2].id = meta.id
+        messages[messages.length - 2]!.id = meta.id
         return true
     }
     if (meta.role === 'assistant') {
-        messages[messages.length - 1].id = meta.id
+        messages[messages.length - 1]!.id = meta.id
         return true
     }
     return false

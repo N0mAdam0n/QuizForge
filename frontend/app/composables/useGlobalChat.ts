@@ -304,7 +304,7 @@ const copySelectedMessages = () => {
     const indices = Array.from(selectedMessageIndices.value).sort((a, b) => a - b)
     const text = indices
         .map(i => messages.value[i])
-        .filter(Boolean)
+        .filter((m): m is NonNullable<typeof m> => Boolean(m))
         .map(m => {
             const role = m.role === 'user' ? 'User' : 'Assistant'
             return `**${role}:**\n${m.content}`
@@ -410,11 +410,11 @@ const sendMessage = async () => {
                 const dataMatch = line.match(/^data: (.*)$/m)
                 if (!eventMatch || !dataMatch) continue
 
-                const event = eventMatch[1].trim()
-                const dataStr = dataMatch[1].trim()
+                const event = eventMatch[1]!.trim()
+                const dataStr = dataMatch[1]!.trim()
                 const data = JSON.parse(dataStr)
                 if (messages.value.length === 0) continue
-                const last = messages.value[messages.value.length - 1]
+                const last = messages.value[messages.value.length - 1]!
 
                 if (event === 'message') {
                     assistantMessage += data
@@ -443,7 +443,7 @@ const sendMessage = async () => {
             }
         }
 
-        const last = messages.value[messages.value.length - 1]
+        const last = messages.value[messages.value.length - 1]!
         if (!finalizeChatStream(last?.actions ?? [], receivedDone)) {
             throw new Error('SSE stream ended before done')
         }
@@ -454,7 +454,7 @@ const sendMessage = async () => {
     } catch (e) {
         console.error('Chat error', e)
         if (messages.value.length > 0) {
-            const last = messages.value[messages.value.length - 1]
+            const last = messages.value[messages.value.length - 1]!
             if (last.actions) failRunningChatActions(last.actions)
             const interruption = '[Error: 连接提前中断，请重试]'
             if (!last.content.includes(interruption)) last.content += `\n${interruption}`
@@ -473,7 +473,7 @@ const initialize = async () => {
         const data = await $api<AIProvider[]>('/ai-config/providers')
         providers.value = data
         if (allModels.value.length > 0 && !selectedModelId.value) {
-            selectedModelId.value = allModels.value[0].id.toString()
+            selectedModelId.value = allModels.value[0]!.id.toString()
         }
         await fetchSessions()
     } catch (e) {

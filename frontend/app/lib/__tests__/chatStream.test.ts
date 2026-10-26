@@ -33,7 +33,7 @@ describe('chat stream actions', () => {
       tool_call_id: 'missing',
       output: 'wrong',
     })).toBe(false)
-    expect(actions[0].status).toBe('running')
+    expect(actions[0]!.status).toBe('running')
   })
 
   it('falls back to the latest running action for legacy payloads', () => {
@@ -44,7 +44,7 @@ describe('chat stream actions', () => {
 
     completeChatAction(actions, { tool: 'search_questions', output: 'legacy' })
 
-    expect(actions[0].status).toBe('running')
+    expect(actions[0]!.status).toBe('running')
     expect(actions[1]).toMatchObject({ status: 'completed', output: 'legacy' })
   })
 
@@ -56,7 +56,7 @@ describe('chat stream actions', () => {
 
     failRunningChatActions(actions)
 
-    expect(actions[0].status).toBe('completed')
+    expect(actions[0]!.status).toBe('completed')
     expect(actions[1]).toMatchObject({
       status: 'error',
       output: '连接提前中断，未收到工具执行结果',
@@ -68,12 +68,12 @@ describe('chat stream actions', () => {
       { tool: 'pending', input: {}, status: 'running' },
     ]
     expect(finalizeChatStream(completedActions, true)).toBe(true)
-    expect(completedActions[0].status).toBe('running')
+    expect(completedActions[0]!.status).toBe('running')
 
     const interruptedActions: ChatAction[] = [
       { tool: 'pending', input: {}, status: 'running' },
     ]
     expect(finalizeChatStream(interruptedActions, false)).toBe(false)
-    expect(interruptedActions[0].status).toBe('error')
+    expect(interruptedActions[0]!.status).toBe('error')
   })
 })

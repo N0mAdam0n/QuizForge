@@ -28,6 +28,6 @@ export const OpaqueBlock = Node.create({
   },
 
   addNodeView() {
-    return VueNodeViewRenderer(OpaqueBlockView)
+    return VueNodeViewRenderer(OpaqueBlockView as unknown as Parameters<typeof VueNodeViewRenderer>[0])
   },
 })

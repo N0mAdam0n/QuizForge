@@ -553,7 +553,7 @@ const getResultCount = (summaryJson?: string) => {
                     <TableHeader>
                         <TableRow>
                             <TableHead class="w-[50px]">
-                                <Checkbox :model-value="allSelected" @update:model-value="toggleSelectAll" />
+                                <Checkbox :model-value="allSelected" @update:model-value="(v) => toggleSelectAll(v === true)" />
                             </TableHead>
                             <TableHead class="w-[300px]">文件名</TableHead>
                             <TableHead>所属用户</TableHead>
@@ -573,7 +573,7 @@ const getResultCount = (summaryJson?: string) => {
                             <TableCell>
                                 <Checkbox 
                                     :model-value="selectedTasks.includes(task.id)" 
-                                    @update:model-value="(checked) => toggleSelectTask(task.id, checked)" 
+                                    @update:model-value="(checked) => toggleSelectTask(task.id, checked === true)" 
                                 />
                             </TableCell>
                             <TableCell class="font-medium">

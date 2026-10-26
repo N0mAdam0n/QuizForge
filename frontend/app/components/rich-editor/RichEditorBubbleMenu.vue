@@ -35,7 +35,7 @@ function shouldShow({ editor, from, to }: { editor: Editor; from: number; to: nu
 <template>
     <BubbleMenu
         :editor="editor"
-        :should-show="shouldShow"
+        :should-show="(shouldShow as any)"
         :options="{ placement: 'top', offset: 8 }"
     >
         <div

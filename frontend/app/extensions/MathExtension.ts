@@ -111,7 +111,7 @@ export const MathExtension = Node.create<MathExtensionOptions>({
   addStorage() {
     return {
       markdown: {
-        serialize(state, node) {
+        serialize(state: { write: (text: string) => void }, node: { attrs: Record<string, unknown> }) {
           if (node.attrs.display) {
             state.write(`$$${node.attrs.latex}$$`)
           } else {
@@ -119,7 +119,8 @@ export const MathExtension = Node.create<MathExtensionOptions>({
           }
         },
         parse: {
-          setup(md) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setup(md: any) {
             md.use(texmath, { delimiters: 'dollars' })
             // Normalise every texmath renderer to our custom node span
             const renderMath = (display: boolean) => (tokens: any[], idx: number) => {

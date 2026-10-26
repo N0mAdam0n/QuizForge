@@ -255,15 +255,15 @@ watch(() => providers.value, (newProviders) => {
   if (newProviders.length > 0) {
     let changed = false
     if (!activeConfig.value.text_model_id && allModels.value.length > 0) {
-      activeConfig.value.text_model_id = allModels.value[0].id
+      activeConfig.value.text_model_id = allModels.value[0]!.id
       changed = true
     }
     if (!activeConfig.value.vision_model_id && visionModels.value.length > 0) {
-      activeConfig.value.vision_model_id = visionModels.value[0].id
+      activeConfig.value.vision_model_id = visionModels.value[0]!.id
       changed = true
     }
     if (!activeConfig.value.embedding_model_id && embeddingModels.value.length > 0) {
-      activeConfig.value.embedding_model_id = embeddingModels.value[0].id
+      activeConfig.value.embedding_model_id = embeddingModels.value[0]!.id
       changed = true
     }
     if (changed) {

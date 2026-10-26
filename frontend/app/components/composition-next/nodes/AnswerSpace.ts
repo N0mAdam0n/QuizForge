@@ -54,7 +54,7 @@ export const AnswerSpace = Node.create({
   },
 
   addNodeView() {
-    return VueNodeViewRenderer(AnswerSpaceView)
+    return VueNodeViewRenderer(AnswerSpaceView as unknown as Parameters<typeof VueNodeViewRenderer>[0])
   },
 
   addCommands() {

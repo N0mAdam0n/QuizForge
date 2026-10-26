@@ -45,13 +45,13 @@ const renderedContent = computed(() => {
       const styles: string[] = []
       
       // Extract width="value"
-      attrs = attrs.replace(/\bwidth="([^"]*)"/g, (m, val) => {
+      attrs = attrs.replace(/\bwidth="([^"]*)"/g, (m: string, val: string) => {
         styles.push(`width:${val}`)
         return ''
       })
       
       // Extract height="value"
-      attrs = attrs.replace(/\bheight="([^"]*)"/g, (m, val) => {
+      attrs = attrs.replace(/\bheight="([^"]*)"/g, (m: string, val: string) => {
         styles.push(`height:${val}`)
         return ''
       })
@@ -90,14 +90,14 @@ const renderedContent = computed(() => {
     
     // Extract classes
     const classes: string[] = []
-    attrString = attrString.replace(/\.([a-zA-Z0-9_-]+)/g, (m, c) => {
+    attrString = attrString.replace(/\.([a-zA-Z0-9_-]+)/g, (m: string, c: string) => {
       classes.push(c)
       return ''
     })
     
     // Extract id
     let id = ''
-    attrString = attrString.replace(/#([a-zA-Z0-9_-]+)/g, (m, i) => {
+    attrString = attrString.replace(/#([a-zA-Z0-9_-]+)/g, (m: string, i: string) => {
       id = i
       return ''
     })

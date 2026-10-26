@@ -1,10 +1,6 @@
 export default defineNuxtRouteMiddleware(async (to) => {
   const { token } = useAuth()
 
-  if (to.path === '/test') {
-    return
-  }
-
   // 首次安装向导：无需登录即可访问
   if (to.path === '/setup') {
     return

@@ -67,7 +67,7 @@ describe('option / answer defaults', () => {
 
     it('createDefaultAnswer 按题型给合法默认值', () => {
         const opts = createDefaultOptions()
-        expect(createDefaultAnswer('single_choice', opts)).toEqual({ kind: 'single_choice', correct: opts[0].id })
+        expect(createDefaultAnswer('single_choice', opts)).toEqual({ kind: 'single_choice', correct: opts[0]!.id })
         expect(createDefaultAnswer('multiple_choice', opts)).toEqual({ kind: 'multiple_choice', correct: [] })
         expect(createDefaultAnswer('true_false', opts)).toEqual({ kind: 'true_false', correct: true })
         expect(createDefaultAnswer('free_response', opts)).toEqual({ kind: 'free_response', reference: null })
@@ -85,9 +85,9 @@ describe('fillBlanksFromStem', () => {
         const synced = fillBlanksFromStem(stemWithBlanks('b2', 'b1'), prev)
         expect(synced.map((b) => b.id)).toEqual(['b2', 'b1'])
         // b1 的 accept 被保留
-        expect(synced[1].accept).toEqual([doc('答案1')])
+        expect(synced[1]!.accept).toEqual([doc('答案1')])
         // 新增的 b2 得到空 accept
-        expect(synced[0].accept).toEqual([null])
+        expect(synced[0]!.accept).toEqual([null])
     })
 
     it('题干无 blank 节点时保留原答案（迁移旧题）', () => {
@@ -96,7 +96,7 @@ describe('fillBlanksFromStem', () => {
         // 无 prev 时回退到一个空 blank
         const fresh = fillBlanksFromStem(null)
         expect(fresh).toHaveLength(1)
-        expect(fresh[0].accept).toEqual([null])
+        expect(fresh[0]!.accept).toEqual([null])
     })
 })
 

@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { generateHTML, generateJSON } from '@tiptap/core'
+import type { JSONContent } from '@tiptap/core'
 import type { RichDoc } from '@/types'
 import { getSchemaExtensions, clampBlankWidthEm } from '../schemaExtensions'
 import { richContentFixture } from './richContent.fixture'
 
 describe('getSchemaExtensions schema 契约', () => {
-    const html = generateHTML(richContentFixture, getSchemaExtensions())
+    const html = generateHTML(richContentFixture as JSONContent, getSchemaExtensions())
 
     it('转换 fixture 产出非空 HTML', () => {
         expect(html).toBeTruthy()
@@ -91,12 +92,12 @@ describe('image align 渲染与回读', () => {
     }
 
     it('align 为 center/right 时输出 data-align', () => {
-        expect(generateHTML(imageDoc('center'), getSchemaExtensions())).toContain('data-align="center"')
-        expect(generateHTML(imageDoc('right'), getSchemaExtensions())).toContain('data-align="right"')
+        expect(generateHTML(imageDoc('center') as JSONContent, getSchemaExtensions())).toContain('data-align="center"')
+        expect(generateHTML(imageDoc('right') as JSONContent, getSchemaExtensions())).toContain('data-align="right"')
     })
 
     it('align 缺省/为空不输出 data-align', () => {
-        expect(generateHTML(imageDoc(null), getSchemaExtensions())).not.toContain('data-align')
+        expect(generateHTML(imageDoc(null) as JSONContent, getSchemaExtensions())).not.toContain('data-align')
     })
 
     it('从 HTML 回读 align', () => {

@@ -89,7 +89,7 @@ function compareVersions(latest: string, current: string): number {
   for (let i = 0; i < preLen; i++) {
     if (a.prerelease[i] === undefined) return -1
     if (b.prerelease[i] === undefined) return 1
-    const diff = compareIdentifier(a.prerelease[i], b.prerelease[i])
+    const diff = compareIdentifier(a.prerelease[i]!, b.prerelease[i]!)
     if (diff !== 0) return diff
   }
   return 0

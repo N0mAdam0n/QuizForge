@@ -46,7 +46,7 @@ const handleFileSelect = async (event: Event) => {
   const input = event.target as HTMLInputElement
   if (!input.files?.length) return
 
-  const file = input.files[0]
+  const file = input.files[0]!
   if (!file.type.startsWith('image/')) {
     toast.error('请选择图片文件')
     return
