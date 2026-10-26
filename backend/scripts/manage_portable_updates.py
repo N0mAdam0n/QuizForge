@@ -126,6 +126,30 @@ def install_interactive_signing(repository) -> None:
     repository.roles.sign_role = sign_role
 
 
+def scope_latest_archive_to_app(repository) -> None:
+    """Only consider this app's archives when tufup looks for the latest one.
+
+    tufup's Roles.get_latest_archive ignores app_name, so archives from the
+    previous app name (QuestionBank-Portable) would block or mis-patch the
+    first QuizForge-Portable release.
+    """
+    from tufup.common import TargetMeta
+
+    roles = repository.roles
+    app_name = repository.app_name
+
+    def get_latest_archive():
+        signed = roles.targets.signed.targets if roles.targets else {}
+        archives = sorted(
+            meta
+            for meta in (TargetMeta(key) for key in signed.keys())
+            if meta.is_archive and meta.name == app_name
+        )
+        return archives[-1] if archives else None
+
+    roles.get_latest_archive = get_latest_archive
+
+
 def _ensure_private_key_dir_is_safe(keys_dir: Path) -> None:
     resolved = keys_dir.resolve()
     if resolved == PROJECT_ROOT or PROJECT_ROOT in resolved.parents:
@@ -193,11 +217,21 @@ def publish_bundle(repo_dir: Path, keys_dir: Path, bundle_dir: Path) -> None:
     try:
         os.chdir(repo_dir)
         repository = Repository.from_config()
+        scope_latest_archive_to_app(repository)
+        previous = repository.roles.get_latest_archive()
+        if previous is None:
+            print(f"首次发布 {APP_NAME}：仅生成完整包（无增量补丁）")
         repository.add_bundle(
             new_bundle_dir=bundle_dir,
             new_version=__version__,
-            skip_patch=False,
+            skip_patch=previous is None,
         )
+        expected = f"{APP_NAME}-{__version__}.tar.gz"
+        if expected not in repository.roles.targets.signed.targets:
+            raise RuntimeError(
+                f"{expected} was not registered; the version must be greater than "
+                f"the latest published {APP_NAME} version"
+            )
         install_interactive_signing(repository)
         repository.publish_changes(private_key_dirs=[keys_dir])
     finally:

@@ -48,3 +48,23 @@ def test_load_key_gives_up_after_max_attempts(tmp_path):
         mpu.load_private_key_interactive(
             "root", key_path, read=lambda prompt: "nope", out=io.StringIO()
         )
+
+
+def test_latest_archive_is_scoped_to_current_app_name():
+    from types import SimpleNamespace
+
+    targets = {
+        "QuestionBank-Portable-0.2.2.tar.gz": {},
+        "QuestionBank-Portable-0.2.2.patch": {},
+        "QuizForge-Portable-0.2.1.tar.gz": {},
+        "QuizForge-Portable-0.2.0.tar.gz": {},
+    }
+    roles = SimpleNamespace(targets=SimpleNamespace(signed=SimpleNamespace(targets=targets)))
+    repo = SimpleNamespace(roles=roles, app_name="QuizForge-Portable")
+    mpu.scope_latest_archive_to_app(repo)
+    latest = roles.get_latest_archive()
+    assert latest.name == "QuizForge-Portable" and str(latest.version) == "0.2.1"
+
+    targets.clear()
+    targets["QuestionBank-Portable-0.2.2.tar.gz"] = {}
+    assert roles.get_latest_archive() is None
