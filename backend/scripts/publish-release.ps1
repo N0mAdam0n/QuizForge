@@ -7,6 +7,7 @@
 param(
     [Parameter(Mandatory = $true)][ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version,
     [switch]$SkipBuild,
+    [switch]$MakeRelease,         # 上线成功后顺便生成 D:\Release\v<ver> 发布包
     [string]$Server = "root@120.26.57.15",
     [string]$RemoteDir = "/srv/updates",
     [string]$PublicBase = "https://120.26.57.15/updates",
@@ -104,8 +105,14 @@ try {
         if ($remoteSize -ne "$($f.Length)") { Fail "服务器文件大小不一致：$($f.Name)（本地 $($f.Length)，服务器 $remoteSize）" }
         Info "✓ $($f.Name) 大小一致"
     }
-    $served = & curl.exe -sk "$PublicBase/metadata/targets.json"
-    if ($served -notmatch [regex]::Escape("$AppName-$Version")) { Fail "线上 targets.json 中未出现 $AppName-$Version" }
+    # 服务器 targets.json 可能比上传稍晚生效（CDN/缓存），重试几次再判定
+    $pending = @($new | ForEach-Object Name)
+    for ($try = 1; $try -le 8 -and $pending.Count -gt 0; $try++) {
+        $served = (& curl.exe -sk -H "Cache-Control: no-cache" "$PublicBase/metadata/targets.json?t=$(Get-Date -Format yyyyMMddHHmmssfff)") -join "`n"
+        $pending = @($pending | Where-Object { $served -notmatch ('"' + [regex]::Escape($_) + '"') })
+        if ($pending.Count -gt 0) { Info "线上 targets.json 尚未包含 $($pending -join ', ')，第 $try/8 次，5 秒后重试"; Start-Sleep -Seconds 5 }
+    }
+    if ($pending.Count -gt 0) { Fail "线上 targets.json 中未出现：$($pending -join ', ')" }
     Info "✓ 线上 targets.json 已包含 v$Version"
     $ok = $true
 } catch {
@@ -121,6 +128,11 @@ if ($ok) {
     Write-Host "  元数据备份：$bak" -ForegroundColor Green
     Write-Host "  日志：$Log" -ForegroundColor Green
     Log "DONE"
+    if ($MakeRelease) {
+        Step "生成本地发布包 D:\Release\v$Version"
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "make-release.ps1") -Version $Version -SkipPortableBuild
+        if ($LASTEXITCODE -ne 0) { Write-Host "发布包生成失败（不影响已上线的更新）" -ForegroundColor Yellow }
+    }
 }
 Read-Host "按回车关闭"
 if (-not $ok) { exit 1 }
