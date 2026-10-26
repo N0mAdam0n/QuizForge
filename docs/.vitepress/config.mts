@@ -3,17 +3,17 @@ import { defineConfig } from 'vitepress'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   lang: 'zh-CN',
-  title: 'QuestionBank',
-  description: 'AI 原生的题库系统 · 使用文档',
+  title: 'QuizForge',
+  description: 'AI 原生的智能刷题系统 · 使用文档',
 
-  // Project Pages: https://n0madamon.github.io/question-bank-Nom/
-  base: '/question-bank-Nom/',
+  // Project Pages: https://n0madamon.github.io/QuizForge/
+  base: '/QuizForge/',
 
   lastUpdated: true,
   cleanUrls: true,
   metaChunk: true,
 
-  head: [['link', { rel: 'icon', href: '/question-bank-Nom/logo.svg' }]],
+  head: [['link', { rel: 'icon', href: '/QuizForge/logo.svg' }]],
 
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
@@ -147,7 +147,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/N0mAdam0n/question-bank-Nom' }
+      { icon: 'github', link: 'https://github.com/N0mAdam0n/QuizForge' }
     ],
 
     search: {
@@ -156,7 +156,7 @@ export default defineConfig({
 
     editLink: {
       pattern:
-        'https://github.com/N0mAdam0n/question-bank-Nom/edit/main/docs/:path',
+        'https://github.com/N0mAdam0n/QuizForge/edit/main/docs/:path',
       text: '在 GitHub 上编辑此页'
     },
 
@@ -176,7 +176,7 @@ export default defineConfig({
 
     footer: {
       message: '基于 AGPL-3.0 许可发布',
-      copyright: 'Copyright © 2025-present QuestionBank'
+      copyright: 'Copyright © 2025-present QuizForge'
     }
   }
 })

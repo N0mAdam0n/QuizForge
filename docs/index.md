@@ -2,19 +2,19 @@
 layout: home
 
 hero:
-  name: QuestionBank
-  text: AI 原生的题库系统
+  name: QuizForge
+  text: AI 原生的智能刷题系统
   tagline: 智能导入、多题型、多供应商 AI、知识点 RAG 与审核工作流
   image:
     src: /examples/questions.png
-    alt: QuestionBank
+    alt: QuizForge
   actions:
     - theme: brand
       text: 快速开始
       link: /guide/editions
     - theme: alt
       text: GitHub
-      link: https://github.com/N0mAdam0n/question-bank-Nom
+      link: https://github.com/N0mAdam0n/QuizForge
 
 features:
   - title: 多格式智能导入

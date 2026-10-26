@@ -55,7 +55,7 @@
 3. 运行数据库迁移。
 4. 创建管理员账号。
 
-桌面版通过托盘「打开题库」进入向导；服务器版可用脚本创建超管：
+桌面版通过托盘「打开百炼」进入向导；服务器版可用脚本创建超管：
 
 ```bash
 docker compose exec backend python scripts/create_superuser.py

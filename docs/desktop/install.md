@@ -9,7 +9,7 @@
 
 ## 下载与安装
 
-1. 打开 [GitHub Releases](https://github.com/N0mAdam0n/question-bank-Nom/releases)，下载最新的 `QuestionBank-Setup-x.y.z.exe`。
+1. 打开 [GitHub Releases](https://github.com/N0mAdam0n/QuizForge/releases)，下载最新的 `QuizForge-Setup-x.y.z.exe`。
 
 ![](../public/install/github-release-download.png)
 
@@ -20,11 +20,11 @@
 
 ## Lite 便携版
 
-如果不想安装，可从 [GitHub Releases](https://github.com/N0mAdam0n/question-bank-Nom/releases) 下载 `QuestionBank-Portable-x.y.z.zip`。
+如果不想安装，可从 [GitHub Releases](https://github.com/N0mAdam0n/QuizForge/releases) 下载 `QuizForge-Portable-x.y.z.zip`。
 
 1. 将 ZIP **完整解压**到当前 Windows 用户有写入权限的目录，例如文档目录或其他普通文件夹。不要从 ZIP 预览窗口直接运行，也不建议放在 `Program Files` 等受保护目录。
-2. 双击解压目录中的 `question-bank.exe`，按首次启动向导创建管理员账号。
-3. 应用数据全部保存在同一解压目录的 `data/` 文件夹中，包括 SQLite 数据库、配置、上传文件、媒体、向量数据和日志；不会使用 `%APPDATA%\QuestionBank`。
+2. 双击解压目录中的 `QuizForge.exe`，按首次启动向导创建管理员账号。
+3. 应用数据全部保存在同一解压目录的 `data/` 文件夹中，包括 SQLite 数据库、配置、上传文件、媒体、向量数据和日志；不会使用 `%APPDATA%\QuizForge`。
 
 便携版不会设置开机自启或安装 Windows 服务。备份或迁移时，先从托盘菜单退出，再复制整个解压目录；移动到另一位置或另一台 Windows 电脑时也应保持目录完整。
 
@@ -45,12 +45,12 @@
 
 | 菜单项 | 说明 |
 |--------|------|
-| 打开题库 | 用默认浏览器打开题库界面 |
+| 打开百炼 | 用默认浏览器打开百炼界面 |
 | 局域网共享 | 勾选后开放给同网段访问（**默认关闭**），详见 [局域网共享](/desktop/lan-sharing) |
 | 重启 | 重启内置服务 |
 | 退出 | 关闭应用与内置服务 |
 
-首次点击「打开题库」后，会进入 **初始化向导**：
+首次点击「打开百炼」后，会进入 **初始化向导**：
 
 1. 选择数据库：桌面版默认使用内置 **SQLite**，无需额外配置。
 2. 创建管理员账号（用户名 + 密码）。
@@ -61,7 +61,7 @@
 桌面版的数据统一存放在：
 
 ```
-%APPDATA%\QuestionBank
+%APPDATA%\QuizForge
 ```
 
 在资源管理器地址栏粘贴上面的路径即可打开。常见内容：
@@ -73,7 +73,7 @@
 Lite 便携版是例外：它将相同数据保存在可执行文件旁的 `data/` 目录。
 
 ::: tip 备份很简单
-关闭应用后，直接复制整个 `%APPDATA%\QuestionBank` 目录即可完成备份。详见 [个人使用 · 备份与恢复](/desktop/personal#备份与恢复)。
+关闭应用后，直接复制整个 `%APPDATA%\QuizForge` 目录即可完成备份。详见 [个人使用 · 备份与恢复](/desktop/personal#备份与恢复)。
 :::
 
 ## 下一步

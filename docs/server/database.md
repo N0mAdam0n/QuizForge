@@ -1,6 +1,6 @@
 # 数据库与迁移
 
-QuestionBank 支持两种数据库，通过统一的数据模型与 Alembic 迁移保持兼容：
+QuizForge 支持两种数据库，通过统一的数据模型与 Alembic 迁移保持兼容：
 
 - **SQLite**:桌面版默认，零配置，单文件。
 - **MySQL 8.0**:服务器版默认，面向团队与生产。
@@ -64,7 +64,7 @@ tar xzf data-backup.tgz
 关闭桌面应用后，直接复制数据目录：
 
 ```
-%APPDATA%\QuestionBank
+%APPDATA%\QuizForge
 ```
 
 详见 [个人使用 · 备份与恢复](/desktop/personal#备份与恢复)。

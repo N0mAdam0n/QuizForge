@@ -15,14 +15,14 @@
 - 一台安装了 **Docker** 与 **Docker Compose** 的服务器（Linux 推荐）
 - 可访问的 AI 供应商（Gemini / OpenAI / 兼容 API）
 
-当前仓库的镜像由 CI 自动构建并发布到 GitHub Container Registry（`ghcr.io/n0madamon/question-bank-nom-backend`、`ghcr.io/n0madamon/question-bank-nom-frontend`），推荐直接拉取，无需在服务器上本地构建。`docker-compose.yml` 中 `backend` / `worker` / `frontend` 均已配置好对应的 `image:`，默认拉取 `latest`。
+当前仓库的镜像由 CI 自动构建并发布到 GitHub Container Registry（`ghcr.io/n0madamon/quizforge-backend`、`ghcr.io/n0madamon/quizforge-frontend`），推荐直接拉取，无需在服务器上本地构建。`docker-compose.yml` 中 `backend` / `worker` / `frontend` 均已配置好对应的 `image:`，默认拉取 `latest`。
 
 ## 部署步骤
 
 ```bash
 # 1. 只需 docker-compose.yml 与 .env.example 两个文件即可，无需克隆完整仓库
-curl -O https://raw.githubusercontent.com/N0mAdam0n/question-bank-Nom/main/docker-compose.yml
-curl -O https://raw.githubusercontent.com/N0mAdam0n/question-bank-Nom/main/.env.example
+curl -O https://raw.githubusercontent.com/N0mAdam0n/QuizForge/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/N0mAdam0n/QuizForge/main/.env.example
 cp .env.example .env
 ```
 
@@ -53,7 +53,7 @@ docker compose exec backend python scripts/create_superuser.py
 
 ```bash
 curl -o docker-compose.override.yml \
-  https://raw.githubusercontent.com/N0mAdam0n/question-bank-Nom/main/docker-compose.cn.yml
+  https://raw.githubusercontent.com/N0mAdam0n/QuizForge/main/docker-compose.cn.yml
 
 docker compose pull
 docker compose up -d
@@ -102,7 +102,7 @@ docker compose pull
 docker compose up -d
 ```
 
-默认使用 `latest` 标签（对应 `main` 分支最新构建）。如需锁定到具体版本，在 `.env` 中设置 `IMAGE_TAG`（如 `1.2.0`），再执行 `docker compose pull && docker compose up -d`。可用标签见[后端容器包页面](https://github.com/N0mAdam0n/question-bank-Nom/pkgs/container/question-bank-nom-backend)和[前端容器包页面](https://github.com/N0mAdam0n/question-bank-Nom/pkgs/container/question-bank-nom-frontend)。
+默认使用 `latest` 标签（对应 `main` 分支最新构建）。如需锁定到具体版本，在 `.env` 中设置 `IMAGE_TAG`（如 `1.2.0`），再执行 `docker compose pull && docker compose up -d`。可用标签见[后端容器包页面](https://github.com/N0mAdam0n/QuizForge/pkgs/container/quizforge-backend)和[前端容器包页面](https://github.com/N0mAdam0n/QuizForge/pkgs/container/quizforge-frontend)。
 
 更多见 [运维](/server/operations) 与 [数据库与迁移](/server/database)。
 
