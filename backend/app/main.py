@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 pass
 
-app = FastAPI(title="QuestionBank API", version=__version__, lifespan=lifespan)
+app = FastAPI(title="QuizForge API", version=__version__, lifespan=lifespan)
 
 
 @app.exception_handler(DomainError)
@@ -126,4 +126,4 @@ if FRONTEND_DIR is not None:
 else:
     @app.get("/")
     def read_root():
-        return {"message": "Welcome to QuestionBank API"}
+        return {"message": "Welcome to QuizForge API"}

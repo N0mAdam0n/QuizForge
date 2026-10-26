@@ -11,7 +11,7 @@ router = APIRouter()
 
 # GitHub repository the desktop releases are published to. The frontend uses
 # this to query the latest release and prompt the user to update.
-GITHUB_REPO = "N0mAdam0n/question-bank-Nom"
+GITHUB_REPO = "N0mAdam0n/QuizForge"
 
 
 @router.get("/version")
@@ -112,6 +112,7 @@ async def portable_update_health(request: Request) -> dict:
     """Health endpoint used by the external installer before finalizing updates."""
     return {
         "version": __version__,
+        "configured": is_configured(),
         "migrations_ok": bool(
             is_configured()
             and getattr(request.app.state, "update_migrations_ok", False)

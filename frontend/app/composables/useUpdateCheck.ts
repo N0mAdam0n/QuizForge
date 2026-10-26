@@ -122,7 +122,7 @@ async function fetchLatestRelease(repo: string, includePrerelease: boolean): Pro
 }
 
 export function useUpdateCheck() {
-  const state = useLocalStorage<UpdateState>('question-bank-nom-update-check', {
+  const state = useLocalStorage<UpdateState>('quizforge-update-check', {
     current: '',
     latest: '',
     hasUpdate: false,
@@ -141,12 +141,27 @@ export function useUpdateCheck() {
   const { $api } = useNuxtApp()
 
   async function check(force = false): Promise<void> {
+    // 'installing'/'downloading' are transient and must never survive a reload:
+    // after the installer restarts the app the persisted phase would otherwise
+    // stay stuck on "正在重启" until the 6-hour cache expires.
+    if (state.value.phase === 'installing' || state.value.phase === 'downloading') {
+      force = true
+    }
+    if (!force && state.value.current) {
+      // Cheap local call: a changed running version invalidates the cache.
+      try {
+        const info = await $api<VersionInfo>('/system/version')
+        if (info.version !== state.value.current) force = true
+      } catch {
+        // fall through to the normal cache rules
+      }
+    }
     // Skip if checked within the last 6 hours, unless forced.
     const sixHours = 6 * 60 * 60 * 1000
     if (!force && state.value.checkedAt && Date.now() - state.value.checkedAt < sixHours) {
       return
     }
-    if (state.value.checking) return
+    if (state.value.checking && !force) return
 
     state.value.checking = true
     state.value.error = null

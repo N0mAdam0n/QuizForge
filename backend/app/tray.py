@@ -24,7 +24,7 @@ import webbrowser
 
 PORT = int(os.getenv("PORT", "8000"))
 URL_LOCAL = f"http://127.0.0.1:{PORT}/"
-_FIREWALL_RULE = f"QuestionBank ({PORT})"
+_FIREWALL_RULE = f"QuizForge ({PORT})"
 _MUTEX_HANDLE = None
 
 
@@ -36,7 +36,7 @@ def _acquire_single_instance() -> bool:
         import ctypes
 
         kernel32 = ctypes.windll.kernel32
-        handle = kernel32.CreateMutexW(None, False, "Global\\QuestionBankTray")
+        handle = kernel32.CreateMutexW(None, False, "Global\\QuizForgeTray")
         error_already_exists = 183
         if kernel32.GetLastError() == error_already_exists:
             return False
@@ -245,11 +245,11 @@ def run_tray() -> None:
     # Auto-open the UI once on launch.
     threading.Thread(target=_open_when_ready, args=(URL_LOCAL,), daemon=True).start()
 
-    icon = pystray.Icon("question-bank", _make_image(), "QuestionBank")
+    icon = pystray.Icon("quizforge", _make_image(), "百炼 QuizForge")
 
     def _notify(message: str) -> None:
         try:
-            icon.notify(message, "QuestionBank")
+            icon.notify(message, "百炼 QuizForge")
         except Exception:  # noqa: BLE001 - notifications are best-effort
             pass
 
@@ -290,7 +290,7 @@ def run_tray() -> None:
     update_service.set_shutdown_callback(stop_for_update)
 
     icon.menu = Menu(
-        MenuItem("打开题库", on_open, default=True),
+        MenuItem("打开百炼", on_open, default=True),
         MenuItem("局域网共享", on_toggle_lan, checked=lambda _i: get_lan_share()),
         MenuItem("重启", on_restart),
         MenuItem("退出", on_quit),

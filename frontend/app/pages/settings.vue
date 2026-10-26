@@ -65,11 +65,11 @@ interface PublicTelemetryStats {
 }
 
 const publicTelemetryStats = useLocalStorage<PublicTelemetryStats | null>(
-  'question-bank-public-telemetry-stats',
+  'quizforge-public-telemetry-stats',
   null,
 )
 const publicTelemetryStatsFetchedAt = useLocalStorage(
-  'question-bank-public-telemetry-stats-fetched-at',
+  'quizforge-public-telemetry-stats-fetched-at',
   0,
 )
 const publicTelemetryStatsLoading = ref(false)

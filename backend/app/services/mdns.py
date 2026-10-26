@@ -1,6 +1,6 @@
 """Advertises the desktop app on the LAN via mDNS (Bonjour/Avahi).
 
-Lets colleagues reach the app as ``http://questionbank.local:PORT/`` instead
+Lets colleagues reach the app as ``http://quizforge.local:PORT/`` instead
 of having to read the host's IP off the tray menu. Best-effort only: mDNS
 depends on multicast reaching the client (blocked on some corporate/guest
 Wi-Fi, and unreliably resolved on Android), so the IP address must always
@@ -12,8 +12,8 @@ from __future__ import annotations
 import socket
 import threading
 
-HOSTNAME = "questionbank.local."
-_SERVICE_NAME = "questionbank._http._tcp.local."
+HOSTNAME = "quizforge.local."
+_SERVICE_NAME = "quizforge._http._tcp.local."
 _SERVICE_TYPE = "_http._tcp.local."
 
 _lock = threading.Lock()
@@ -22,7 +22,7 @@ _service_info = None
 
 
 def start(ip: str, port: int) -> str | None:
-    """Register ``questionbank.local`` -> ``ip:port``; returns the hostname on success."""
+    """Register ``quizforge.local`` -> ``ip:port``; returns the hostname on success."""
     global _zeroconf, _service_info
     with _lock:
         _stop_locked()

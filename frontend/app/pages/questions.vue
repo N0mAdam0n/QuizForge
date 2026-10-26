@@ -36,6 +36,6 @@ onMounted(async () => {
 
 <template>
   <div class="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
-    正在打开题库…
+    正在打开百炼…
   </div>
 </template>

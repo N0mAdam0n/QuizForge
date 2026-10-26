@@ -1,10 +1,10 @@
-; Inno Setup script for QuestionBank (Windows desktop / tray app).
+; Inno Setup script for QuizForge (Windows desktop / tray app).
 ;
 ; Produces a friendly GUI installer: double-click -> UAC -> Next/Install/Finish.
 ; It installs the app to Program Files, adds a login autostart entry so the
 ; tray icon appears after every sign-in, and creates Start Menu shortcuts.
 ; Uninstall (via Windows "Apps") closes the tray, removes the autostart entry
-; and any firewall rule; application data in %APPDATA%\QuestionBank is preserved.
+; and any firewall rule; application data in %APPDATA%\QuizForge is preserved.
 ;
 ; Local-network sharing is OFF by default and is toggled from the tray menu
 ; (which adds/removes the firewall rule on demand) -- the installer no longer
@@ -12,7 +12,7 @@
 ;
 ; Compiled in CI with:
 ;   iscc /DMyAppVersion=<ver> /DPayloadDir=<staged files> /O<out dir> installer.iss
-; PayloadDir must contain: question-bank.exe (+ optional README.txt).
+; PayloadDir must contain: QuizForge.exe (+ optional README.txt).
 
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0-dev"
@@ -21,22 +21,22 @@
   #define PayloadDir "."
 #endif
 
-#define MyAppName "QuestionBank"
-#define MyAppExe "question-bank.exe"
+#define MyAppName "QuizForge"
+#define MyAppExe "QuizForge.exe"
 #define MyPort "8000"
-#define MyFwRule "QuestionBank (" + MyPort + ")"
+#define MyFwRule "QuizForge (" + MyPort + ")"
 
 [Setup]
-AppId={{8F3A2B14-9C7E-4D6A-B1F2-3E5C7A9D0B11}
+AppId={{DD9A67FE-8A1B-47E7-8071-35093A0103C5}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher=N0mAdam0n
-DefaultDirName={autopf}\QuestionBank
+DefaultDirName={autopf}\QuizForge
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#MyAppExe}
 UninstallDisplayName={#MyAppName} {#MyAppVersion}
-OutputBaseFilename=QuestionBank-Setup-{#MyAppVersion}
+OutputBaseFilename=QuizForge-Setup-{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=admin
@@ -56,17 +56,17 @@ Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [INI]
 ; Internet shortcut used by the Start Menu "open" icon (opens the running app).
-Filename: "{app}\QuestionBank.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:{#MyPort}/"
+Filename: "{app}\QuizForge.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:{#MyPort}/"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
-Name: "{group}\打开题库"; Filename: "{app}\QuestionBank.url"
+Name: "{group}\打开百炼"; Filename: "{app}\QuizForge.url"
 Name: "{group}\卸载题库"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
 
 [Registry]
 ; Login autostart for all users (single-PC server model). Removed on uninstall.
-Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "QuestionBank"; ValueData: """{app}\{#MyAppExe}"""; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "QuizForge"; ValueData: """{app}\{#MyAppExe}"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
 ; Launch the tray now (as the signed-in user, not the elevated installer).
@@ -78,7 +78,7 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/im {#MyAppExe} /f"; Flags: runhidd
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#MyFwRule}"""; Flags: runhidden; RunOnceId: "RemoveFirewall"
 
 [UninstallDelete]
-Type: files; Name: "{app}\QuestionBank.url"
+Type: files; Name: "{app}\QuizForge.url"
 
 [Code]
 { Close any running tray instance before copying files, otherwise the running

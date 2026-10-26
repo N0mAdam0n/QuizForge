@@ -14,8 +14,8 @@ sys.path.insert(0, str(BACKEND_DIR))
 from app._version import __version__
 
 
-DEFAULT_DIST_DIR = BACKEND_DIR / "dist" / "QuestionBank-Portable"
-DEFAULT_ARCHIVE_PATH = BACKEND_DIR / "dist" / f"QuestionBank-Portable-{__version__}.zip"
+DEFAULT_DIST_DIR = BACKEND_DIR / "dist" / "QuizForge-Portable"
+DEFAULT_ARCHIVE_PATH = BACKEND_DIR / "dist" / f"QuizForge-Portable-{__version__}.zip"
 README_SOURCE = BACKEND_DIR / "deploy" / "windows" / "portable" / "README.txt"
 
 
@@ -27,13 +27,13 @@ def main() -> None:
     dist_dir: Path = args.dist_dir
     archive_path: Path = args.archive_path
 
-    if not (dist_dir / "question-bank.exe").is_file():
+    if not (dist_dir / "QuizForge.exe").is_file():
         raise FileNotFoundError(
             f"Portable executable not found at {dist_dir}; build run-portable.spec first."
         )
 
     (dist_dir / "portable.mode").write_text(
-        "QuestionBank portable data is stored in the sibling data directory.\n",
+        "QuizForge portable data is stored in the sibling data directory.\n",
         encoding="utf-8",
     )
     shutil.copy2(README_SOURCE, dist_dir / "README.txt")

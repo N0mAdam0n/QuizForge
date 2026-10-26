@@ -1,4 +1,4 @@
-# Contributing to QuestionBank
+# Contributing to QuizForge
 
 感谢你对本项目感兴趣！在提交贡献前，请阅读以下说明。
 

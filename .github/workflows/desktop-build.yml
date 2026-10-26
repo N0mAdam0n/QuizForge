@@ -103,7 +103,7 @@ jobs:
           # Stage everything the installer bundles into Program Files.
           $payload = "installer_payload"
           New-Item -ItemType Directory -Force -Path $payload | Out-Null
-          Copy-Item backend/dist/question-bank.exe "$payload/question-bank.exe"
+          Copy-Item backend/dist/QuizForge.exe "$payload/QuizForge.exe"
           Copy-Item backend/deploy/windows/README.txt "$payload/"
 
           # Compile with Inno Setup (preinstalled on GitHub windows runners).
@@ -115,16 +115,16 @@ jobs:
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           & $iscc "/DMyAppVersion=$ver" "/DPayloadDir=$((Resolve-Path $payload).Path)" "/O$((Resolve-Path $out).Path)" backend/deploy/windows/installer.iss
 
-          $setup = "$out/QuestionBank-Setup-$ver.exe"
+          $setup = "$out/QuizForge-Setup-$ver.exe"
           if (-not (Test-Path $setup)) { throw "Installer not produced: $setup" }
-          $portable = "backend/dist/QuestionBank-Portable-$ver.zip"
+          $portable = "backend/dist/QuizForge-Portable-$ver.zip"
           if (-not (Test-Path $portable)) { throw "Portable ZIP not produced: $portable" }
           echo "setup=$setup" >> $env:GITHUB_OUTPUT
           echo "portable=$portable" >> $env:GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
-          name: question-bank-windows-packages
+          name: quizforge-windows-packages
           path: |
             ${{ steps.pkg.outputs.setup }}
             ${{ steps.pkg.outputs.portable }}
@@ -143,7 +143,7 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          name: QuestionBank ${{ github.ref_name }}
+          name: QuizForge ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           files: artifacts/**/*
           generate_release_notes: true

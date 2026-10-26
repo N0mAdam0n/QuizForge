@@ -1,4 +1,4 @@
-# PyInstaller spec for the QuestionBank desktop build.
+# PyInstaller spec for the QuizForge desktop build.
 #
 # Build with:  uv run pyinstaller run.spec --clean
 #
@@ -98,7 +98,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="question-bank",
+    name="QuizForge",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

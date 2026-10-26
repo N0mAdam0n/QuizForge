@@ -52,6 +52,9 @@ datas += [
 _UPDATE_ROOT = os.path.join("deploy", "windows", "update", "root.json")
 if os.path.isfile(_UPDATE_ROOT):
     datas.append((_UPDATE_ROOT, "update"))
+_UPDATE_INSTALLER = os.path.join("deploy", "windows", "update", "installer.ps1")
+if os.path.isfile(_UPDATE_INSTALLER):
+    datas.append((_UPDATE_INSTALLER, "update"))
 
 hiddenimports += collect_submodules("app")
 hiddenimports += collect_submodules("scripts")
@@ -88,7 +91,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="question-bank",
+    name="QuizForge",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -105,5 +108,5 @@ portable = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="QuestionBank-Portable",
+    name="QuizForge-Portable",
 )

@@ -27,7 +27,7 @@ services:
       - chromadb_data:/data
 
   migrate:
-    image: ghcr.io/n0madamon/question-bank-nom-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/n0madamon/quizforge-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -42,7 +42,7 @@ services:
         condition: service_healthy
 
   backend:
-    image: ghcr.io/n0madamon/question-bank-nom-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/n0madamon/quizforge-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -64,7 +64,7 @@ services:
         condition: service_started
 
   worker:
-    image: ghcr.io/n0madamon/question-bank-nom-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/n0madamon/quizforge-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -86,7 +86,7 @@ services:
         condition: service_started
 
   frontend:
-    image: ghcr.io/n0madamon/question-bank-nom-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/n0madamon/quizforge-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile

@@ -44,7 +44,7 @@ const goCreateSubject = () => router.push('/subjects?create=true')
         class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
       >
         <div class="flex aspect-square size-8 items-center justify-center rounded-lg text-primary-foreground">
-          <img src="/logo.svg" alt="题库系统" class="size-8" />
+          <img src="/logo.svg" alt="百炼 QuizForge" class="size-8" />
         </div>
         <div class="flex min-w-0 flex-col gap-0.5 leading-none">
           <span class="flex min-w-0 items-center gap-1">

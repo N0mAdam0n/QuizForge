@@ -26,7 +26,7 @@ from app.core.config import get_db_url, settings
 
 logger = logging.getLogger(__name__)
 
-_APP_NAME = "QuestionBank-Portable"
+_APP_NAME = "QuizForge-Portable"
 
 
 @dataclass
@@ -71,6 +71,12 @@ class PortableUpdateService:
         if getattr(sys, "frozen", False):
             return Path(getattr(sys, "_MEIPASS")) / "update" / "root.json"
         return Path(__file__).resolve().parents[2] / "deploy" / "windows" / "update" / "root.json"
+
+    @staticmethod
+    def _installer_template_path() -> Path:
+        if getattr(sys, "frozen", False):
+            return Path(getattr(sys, "_MEIPASS")) / "update" / "installer.ps1"
+        return Path(__file__).resolve().parents[2] / "deploy" / "windows" / "update" / "installer.ps1"
 
     @property
     def is_portable(self) -> bool:
@@ -125,12 +131,17 @@ class PortableUpdateService:
                     size=int(state.get("size") or 0),
                     downloaded=int(state.get("size") or 0),
                 )
-        elif state.get("status") == "rolled_back":
+        elif state.get("status") in {"rolled_back", "rollback_failed", "failed"}:
+            messages = {
+                "rolled_back": "上次更新未通过启动检查，已自动回滚",
+                "rollback_failed": "上次更新失败且回滚不完整，请查看 updates/update.log",
+                "failed": "上次更新未能开始（旧进程未退出或安装出错），请查看 updates/update.log",
+            }
             self._status = UpdateStatus(
                 phase="failed",
                 current_version=__version__,
                 latest_version=str(state.get("latest_version") or ""),
-                error="上次更新未通过启动检查，已自动回滚",
+                error=messages[state["status"]],
             )
 
     def snapshot(self) -> dict[str, Any]:
@@ -342,7 +353,7 @@ class PortableUpdateService:
         if staging.is_symlink() or not staging.is_dir():
             return False
         required = (
-            staging / "question-bank.exe",
+            staging / "QuizForge.exe",
             staging / "_internal",
             staging / "portable.mode",
         )
@@ -390,109 +401,40 @@ class PortableUpdateService:
         current_version: str,
         process_id: int,
         port: int,
-    ) -> Path:
-        install_dir = self._install_dir()
-        staging_dir = self._paths()["staging"]
-        state_path = self._paths()["state"]
-        script = f"""$ErrorActionPreference = 'Stop'
-$oldPid = {process_id}
-$installDir = {self._ps_quote(install_dir)}
-$stagingDir = {self._ps_quote(staging_dir)}
-$backupDir = {self._ps_quote(backup_dir)}
-$statePath = {self._ps_quote(state_path)}
-$logPath = {self._ps_quote(self._paths()["updates"] / "update.log")}
-$databasePath = {self._ps_quote(database_path)}
-$databaseBackup = {self._ps_quote(database_backup)}
-$oldVersion = {self._ps_quote(current_version)}
-$newVersion = {self._ps_quote(latest_version)}
-$port = {port}
-$names = @('question-bank.exe', '_internal', 'portable.mode', 'README.txt')
-$changed = New-Object 'System.Collections.Generic.List[string]'
-Add-Content -LiteralPath $logPath -Value "$(Get-Date -Format o) installer started, waiting for pid $oldPid"
-$deadline = [DateTime]::UtcNow.AddSeconds(60)
-while ((Get-Process -Id $oldPid -ErrorAction SilentlyContinue) -and [DateTime]::UtcNow -lt $deadline) {{
-    Start-Sleep -Milliseconds 500
-}}
-if (Get-Process -Id $oldPid -ErrorAction SilentlyContinue) {{
-    Add-Content -LiteralPath $logPath -Value "$(Get-Date -Format o) old process did not exit in time"
-    Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
-    exit 10
-}}
-$programBackup = Join-Path $backupDir 'program'
-New-Item -ItemType Directory -Path $programBackup -Force | Out-Null
-$state = @{{ status = 'pending'; previous_version = $oldVersion; latest_version = $newVersion; backup_dir = $backupDir }}
-$state | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
-Add-Content -LiteralPath $logPath -Value "$(Get-Date -Format o) installing $newVersion"
-try {{
-    foreach ($name in $names) {{
-        $source = Join-Path $stagingDir $name
-        $destination = Join-Path $installDir $name
-        $saved = Join-Path $programBackup $name
-        if (Test-Path -LiteralPath $destination) {{
-            Move-Item -LiteralPath $destination -Destination $saved
-        }}
-        $changed.Add($name)
-        Move-Item -LiteralPath $source -Destination $destination
-    }}
-    $newExe = Join-Path $installDir 'question-bank.exe'
-    $process = Start-Process -FilePath $newExe -ArgumentList @('--post-update', $oldVersion) -PassThru
-    $healthy = $false
-    $healthDeadline = [DateTime]::UtcNow.AddSeconds(60)
-    while ([DateTime]::UtcNow -lt $healthDeadline) {{
-        try {{
-            $health = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/v1/system/update/health" -TimeoutSec 2
-            if ($health.version -eq $newVersion -and $health.migrations_ok -eq $true) {{
-                $healthy = $true
-                break
-            }}
-        }} catch {{
-        }}
-        Start-Sleep -Seconds 1
-    }}
-    if (-not $healthy) {{
-        if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {{
-            & "$env:SystemRoot\\System32\\taskkill.exe" /PID $process.Id /T /F | Out-Null
-        }}
-        throw 'New version did not pass its startup and migration health check'
-    }}
-    $state.status = 'succeeded'
-    $state | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
-    Add-Content -LiteralPath $logPath -Value "$(Get-Date -Format o) update succeeded"
-    Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
-    exit 0
-}} catch {{
-    foreach ($name in $changed) {{
-        $destination = Join-Path $installDir $name
-        if (Test-Path -LiteralPath $destination) {{
-            Remove-Item -LiteralPath $destination -Recurse -Force
-        }}
-        $saved = Join-Path $programBackup $name
-        if (Test-Path -LiteralPath $saved) {{
-            Move-Item -LiteralPath $saved -Destination $destination
-        }}
-    }}
-    if (Test-Path -LiteralPath $databaseBackup) {{
-        Remove-Item -LiteralPath ($databasePath + '-wal') -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath ($databasePath + '-shm') -Force -ErrorAction SilentlyContinue
-        Copy-Item -LiteralPath $databaseBackup -Destination $databasePath -Force
-    }}
-    $state.status = 'rolled_back'
-    $state.error = $_.Exception.Message
-    $state | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
-    Add-Content -LiteralPath $logPath -Value "$(Get-Date -Format o) update rolled back: $($_.Exception.Message)"
-    $oldExe = Join-Path $installDir 'question-bank.exe'
-    if (Test-Path -LiteralPath $oldExe) {{
-        Start-Process -FilePath $oldExe -ArgumentList @('--post-update-failed', $newVersion)
-    }}
-    Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
-    exit 11
-}}
-"""
-        script_path = Path(tempfile.gettempdir()) / (
-            f"question-bank-update-{process_id}.ps1"
-        )
-        script_path.write_text(script, encoding="utf-8")
-        return script_path
+    ) -> tuple[Path, Path]:
+        """Copy the standalone installer template to %TEMP% plus a JSON params file."""
+        template = self._installer_template_path()
+        if not template.is_file():
+            raise RuntimeError(f"Installer template missing: {template}")
+        paths = self._paths()
+        # The installer also waits for every QuizForge.exe under InstallDir,
+        # so worker/child processes are covered without listing them here.
+        wait_pids = [process_id]
+        params = {
+            "InstallDir": str(self._install_dir()),
+            "StagingDir": str(paths["staging"]),
+            "BackupDir": str(backup_dir),
+            "WaitPids": wait_pids,
+            "OldVersion": current_version,
+            "NewVersion": latest_version,
+            "HealthUrl": f"http://127.0.0.1:{port}/api/v1/system/update/health",
+            "WaitTimeoutSec": 60,
+            "HealthTimeoutSec": 90,
+            "LogPath": str(paths["updates"] / "update.log"),
+            "StatePath": str(paths["state"]),
+            "ExeName": "QuizForge.exe",
+            "Names": ["QuizForge.exe", "_internal", "portable.mode", "README.txt"],
+            "DatabasePath": str(database_path),
+            "DatabaseBackup": str(database_backup),
+            "LaunchArgs": ["--post-update", current_version],
+        }
+        temp_dir = Path(tempfile.gettempdir())
+        script_path = temp_dir / f"quizforge-update-{process_id}.ps1"
+        params_path = temp_dir / f"quizforge-update-{process_id}.json"
+        # utf-8-sig so Windows PowerShell 5.1 reads non-ASCII paths correctly.
+        script_path.write_text(template.read_text(encoding="utf-8-sig"), encoding="utf-8-sig")
+        params_path.write_text(json.dumps(params, ensure_ascii=False, indent=1), encoding="utf-8-sig")
+        return script_path, params_path
 
     def install(self) -> dict[str, Any]:
         if not self.is_portable or not self._valid_staging(self._paths()["staging"]):
@@ -500,7 +442,7 @@ try {{
         if self._shutdown_callback is None:
             raise RuntimeError("Portable update shutdown handler is unavailable")
         install_dir = self._install_dir()
-        probe = install_dir / f".question-bank-update-{os.getpid()}.tmp"
+        probe = install_dir / f".quizforge-update-{os.getpid()}.tmp"
         try:
             probe.write_text("update write test", encoding="ascii")
             probe.unlink()
@@ -513,7 +455,7 @@ try {{
         )
         database_backup = backup_dir / "db" / "database.sqlite"
         database_path = self._backup_database(database_backup)
-        script_path = self._build_installer_script(
+        script_path, params_path = self._build_installer_script(
             backup_dir=backup_dir,
             database_path=database_path,
             database_backup=database_backup,
@@ -526,7 +468,7 @@ try {{
         # not in our Windows job object; otherwise it dies when the tray exits.
         inner = (
             "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass "
-            f'-WindowStyle Hidden -File "{script_path}"'
+            f'-WindowStyle Hidden -File "{script_path}" -ParamsFile "{params_path}"'
         )
         launcher = (
             "$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create "

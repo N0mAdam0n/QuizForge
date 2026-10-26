@@ -1,4 +1,4 @@
-﻿# 一键构建 question-bank-Nom 便携版
+﻿# 一键构建 百炼 QuizForge 便携版
 # 用法（放在项目根目录运行）：
 #   powershell -ExecutionPolicy Bypass -File .\build-portable.ps1
 #   powershell -ExecutionPolicy Bypass -File .\build-portable.ps1 -TestDir D:\qb-test -SkipFrontend
@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 $Backend = Join-Path $Root "backend"
 $Frontend = Join-Path $Root "frontend"
-$Dist = Join-Path $Backend "dist\QuestionBank-Portable"
+$Dist = Join-Path $Backend "dist\QuizForge-Portable"
 
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Run($exe, [string[]]$argv) {
@@ -45,7 +45,7 @@ else { Write-Warning "构建结果中没有 root.json" }
 
 if ($TestDir) {
     Step "复制到测试目录 $TestDir"
-    $target = Join-Path $TestDir "QuestionBank-Portable"
+    $target = Join-Path $TestDir "QuizForge-Portable"
     if (Test-Path $target) {
         $dataDir = Join-Path $target "data"
         if (Test-Path $dataDir) {
@@ -55,8 +55,8 @@ if ($TestDir) {
     }
     New-Item -ItemType Directory -Force $TestDir | Out-Null
     Copy-Item -Recurse $Dist $target
-    Write-Host "测试版位于 $target\question-bank.exe" -ForegroundColor Green
+    Write-Host "测试版位于 $target\QuizForge.exe" -ForegroundColor Green
 }
 
 Step "完成"
-Get-ChildItem (Join-Path $Backend "dist") -Filter "QuestionBank-Portable-*.zip" | Sort-Object LastWriteTime | Select-Object -Last 1 | ForEach-Object { Write-Host "ZIP: $($_.FullName)" }
+Get-ChildItem (Join-Path $Backend "dist") -Filter "QuizForge-Portable-*.zip" | Sort-Object LastWriteTime | Select-Object -Last 1 | ForEach-Object { Write-Host "ZIP: $($_.FullName)" }

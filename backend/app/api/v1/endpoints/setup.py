@@ -99,6 +99,12 @@ async def complete_setup(payload: SetupComplete) -> dict:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Migration failed: {exc}") from exc
 
+    # Let the portable updater health check see that this database is migrated
+    # without requiring an app restart after the first-run wizard.
+    from app.main import app as _app
+
+    _app.state.update_migrations_ok = True
+
     # 4. Rebuild the engine against the freshly configured database.
     await reset_engine(url)
 

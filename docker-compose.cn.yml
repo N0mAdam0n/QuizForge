@@ -3,7 +3,7 @@
 # 这是一个 override 文件，必须与 docker-compose.yml 一起使用。把它下载成
 # docker-compose.override.yml，Compose 会自动加载，之后照常 docker compose up -d：
 #   curl -o docker-compose.override.yml \
-#     https://raw.githubusercontent.com/N0mAdam0n/question-bank-Nom/main/docker-compose.cn.yml
+#     https://raw.githubusercontent.com/N0mAdam0n/QuizForge/main/docker-compose.cn.yml
 #
 # 想保留原文件名，则每条命令都要显式指定：
 #   docker compose -f docker-compose.yml -f docker-compose.cn.yml up -d
@@ -16,13 +16,13 @@ services:
     image: crpi-60iblxi36hykzkgd.cn-hangzhou.personal.cr.aliyuncs.com/question-bank/chromadb:latest
 
   migrate:
-    image: ghcr.io/n0madamon/question-bank-nom-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/n0madamon/quizforge-backend:${IMAGE_TAG:-latest}
 
   backend:
-    image: ghcr.io/n0madamon/question-bank-nom-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/n0madamon/quizforge-backend:${IMAGE_TAG:-latest}
 
   worker:
-    image: ghcr.io/n0madamon/question-bank-nom-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/n0madamon/quizforge-backend:${IMAGE_TAG:-latest}
 
   frontend:
-    image: ghcr.io/n0madamon/question-bank-nom-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/n0madamon/quizforge-frontend:${IMAGE_TAG:-latest}

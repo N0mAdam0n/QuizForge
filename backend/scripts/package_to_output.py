@@ -11,8 +11,8 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 OUTPUT_ROOT = Path(r"D:\VS Code Compile")
 VERSION_FILE = BACKEND_DIR / "compile-output-version.txt"
-DESKTOP_EXE = BACKEND_DIR / "dist" / "question-bank.exe"
-PORTABLE_DIST = BACKEND_DIR / "build" / "package-to-output" / "QuestionBank-Portable"
+DESKTOP_EXE = BACKEND_DIR / "dist" / "QuizForge.exe"
+PORTABLE_DIST = BACKEND_DIR / "build" / "package-to-output" / "QuizForge-Portable"
 VERSION_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 
 
@@ -37,7 +37,7 @@ def _next_patch(version: tuple[int, int, int]) -> tuple[int, int, int]:
 def main() -> None:
     if not DESKTOP_EXE.is_file():
         raise FileNotFoundError(f"Desktop executable not found: {DESKTOP_EXE}")
-    if not (PORTABLE_DIST / "question-bank.exe").is_file():
+    if not (PORTABLE_DIST / "QuizForge.exe").is_file():
         raise FileNotFoundError(
             f"Portable build not found: {PORTABLE_DIST}; build run-portable.spec first."
         )
@@ -50,8 +50,8 @@ def main() -> None:
         output_dir = OUTPUT_ROOT / _format_version(version)
     output_dir.mkdir()
 
-    shutil.copy2(DESKTOP_EXE, output_dir / "QuestionBank-Desktop.exe")
-    archive_path = output_dir / "QuestionBank-Lite.zip"
+    shutil.copy2(DESKTOP_EXE, output_dir / "QuizForge-Desktop.exe")
+    archive_path = output_dir / "QuizForge-Lite.zip"
     subprocess.run(
         [
             sys.executable,

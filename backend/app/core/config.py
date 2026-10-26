@@ -56,13 +56,13 @@ def _default_data_dir() -> Path:
             base = Path.home() / "Library" / "Application Support"
         else:
             base = Path(os.getenv("XDG_DATA_HOME", str(Path.home() / ".local" / "share")))
-        return base / "QuestionBank"
+        return base / "QuizForge"
     # config.py -> app/core/config.py, parents[2] == backend/
     return Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "QuestionBank API"
+    PROJECT_NAME: str = "QuizForge API"
     API_V1_STR: str = "/api/v1"
 
     LOG_LEVEL: str = "INFO"

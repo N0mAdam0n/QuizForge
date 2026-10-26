@@ -3,7 +3,7 @@ from app.services.update_service import PortableUpdateService
 
 def make_staging(path):
     path.mkdir()
-    (path / "question-bank.exe").write_bytes(b"exe")
+    (path / "QuizForge.exe").write_bytes(b"exe")
     (path / "_internal").mkdir()
     (path / "portable.mode").write_text("portable", encoding="utf-8")
     return path
@@ -20,7 +20,7 @@ def test_update_staging_requires_portable_files_and_excludes_user_data(tmp_path)
 def test_update_staging_rejects_missing_runtime(tmp_path):
     staging = tmp_path / "missing-runtime"
     staging.mkdir()
-    (staging / "question-bank.exe").write_bytes(b"exe")
+    (staging / "QuizForge.exe").write_bytes(b"exe")
     (staging / "portable.mode").write_text("portable", encoding="utf-8")
 
     assert not PortableUpdateService._valid_staging(staging)

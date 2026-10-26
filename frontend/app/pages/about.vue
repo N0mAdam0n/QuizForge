@@ -20,7 +20,7 @@ const {
 } = useUpdateCheck()
 const localVersion = ref<string>('-')
 
-const REPO_URL = 'https://github.com/N0mAdam0n/question-bank-Nom'
+const REPO_URL = 'https://github.com/N0mAdam0n/QuizForge'
 const UPSTREAM_REPO_URL = 'https://github.com/gygy-open/question-bank'
 const ISSUE_URL = `${REPO_URL}/issues/new`
 
@@ -109,14 +109,14 @@ onMounted(async () => {
     <!-- Hero 区域：增加微小的间距调整和副标题变淡，突出按钮层次 -->
     <section class="flex flex-col items-center gap-4 py-8 text-center">
       <div class="relative shadow-sm rounded-2xl bg-white dark:bg-zinc-900 p-3 ring-1 ring-zinc-200 dark:ring-zinc-800">
-        <img src="/logo.svg" alt="题库系统" class="size-14" />
+        <img src="/logo.svg" alt="百炼 QuizForge" class="size-14" />
       </div>
       <div class="space-y-2 mt-2">
         <h1 class="text-3xl font-extrabold tracking-tight bg-gradient-to-br from-foreground to-foreground/60 bg-clip-text text-transparent">
-            QuestionBank 题库系统
+            百炼 QuizForge
         </h1>
         <p class="text-muted-foreground/80 max-w-md text-base leading-relaxed mx-auto">
-          AI 原生的题库系统
+          AI 原生的智能刷题系统
         </p>
       </div>
       <p class="text-muted-foreground text-sm font-medium bg-secondary/40 px-3 py-1 rounded-full">
@@ -192,7 +192,7 @@ onMounted(async () => {
           本分支新增和调整了本地题库识别、Windows Lite 便携部署及自主练习等功能。它不是原项目的官方发行版，也不代表原项目作者背书。
           当前源代码及本分支发布版本请以
           <a :href="REPO_URL" target="_blank" rel="noopener noreferrer" class="font-medium text-primary underline underline-offset-4">
-            N0mAdam0n/question-bank-Nom
+            N0mAdam0n/QuizForge
           </a>
           为准。
         </p>

@@ -1,4 +1,4 @@
-# QuestionBank Project Instructions
+# QuizForge Project Instructions
 
 ## Project Context
 - **Backend**: Python 3.13+, FastAPI, SQLAlchemy (Async), Alembic, Pydantic.
@@ -89,5 +89,5 @@
 ## Build after code changes
 
 - After completing any code change in this repository, build both Windows desktop editions into a new versioned folder under `D:\VS Code Compile`.
-- Run `just package-to-output` from `backend\`. The output folder contains `QuestionBank-Desktop.exe` and `QuestionBank-Lite.zip`.
+- Run `just package-to-output` from `backend\`. The output folder contains `QuizForge-Desktop.exe` and `QuizForge-Lite.zip`.
 - `backend\compile-output-version.txt` tracks the next output folder version. It starts at `v0.2.1`; after a successful build, only the patch number advances (`v0.2.1` → `v0.2.2`). Never overwrite an existing output folder, and do not advance the marker when packaging fails.
