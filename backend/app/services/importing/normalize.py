@@ -21,6 +21,7 @@ from app.services.question_legacy_adapter import (
 )
 from app.services.question_service import question_service
 
+from .qtype_utils import is_tf_answer, is_tf_option_pair, is_tf_type_keyword, resolve_tf_answer
 from .contracts import FailedItem, ImportDefaults, NormalizeReport
 
 logger = logging.getLogger(__name__)
@@ -29,16 +30,49 @@ logger = logging.getLogger(__name__)
 def coerce_q_type(raw: Any) -> QuestionType:
     if isinstance(raw, QuestionType):
         return raw
-    s = str(raw or "single_choice").lower()
-    if "multiple" in s:
+    if raw is None or not str(raw).strip():
+        return QuestionType.SINGLE_CHOICE
+    s = str(raw).strip().lower()
+    try:
+        return QuestionType(s)
+    except ValueError:
+        pass
+    if "multiple" in s or "多选" in s:
         return QuestionType.MULTIPLE_CHOICE
-    if "true" in s or "false" in s:
+    if is_tf_type_keyword(s):
         return QuestionType.TRUE_FALSE
     if "fill" in s or "blank" in s or "填空" in s:
         return QuestionType.FILL_IN_THE_BLANK
-    if "free" in s or "response" in s or "essay" in s or "解答" in s or "short" in s:
+    if "free" in s or "response" in s or "essay" in s or "解答" in s or "简答" in s or "short" in s:
         return QuestionType.FREE_RESPONSE
+    if "single" in s or "单选" in s or "选择" in s or "choice" in s:
+        return QuestionType.SINGLE_CHOICE
+    logger.warning("coerce_q_type: unrecognized q_type %r, falling back to single_choice", raw)
     return QuestionType.SINGLE_CHOICE
+
+
+def apply_true_false_safety_net(
+    q_type: QuestionType, options: Any, answer: Any
+) -> tuple[QuestionType, Any, Any]:
+    """选择题若实为判断题(对/错选项对,或无选项且答案为对/错),改判为 TRUE_FALSE。
+
+    返回 (q_type, options, answer);改判时丢弃选项、把答案换成 "对"/"错" 原文,
+    交由 convert_answer(_parse_true_false)转换为布尔值。
+    """
+    if q_type not in (QuestionType.SINGLE_CHOICE, QuestionType.MULTIPLE_CHOICE):
+        return q_type, options, answer
+    opts = options if isinstance(options, list) else []
+    if opts and is_tf_option_pair(opts):
+        new_answer = resolve_tf_answer(answer, opts)
+        if answer not in (None, "") and new_answer is None:
+            # 答案无法映射为对/错,保留原文交下游降级 legacy_unresolved。
+            new_answer = answer
+        logger.info("import: reclassify %s with T/F option pair as true_false", q_type.value)
+        return QuestionType.TRUE_FALSE, None, new_answer
+    if not opts and is_tf_answer(answer):
+        logger.info("import: reclassify optionless %s with T/F answer as true_false", q_type.value)
+        return QuestionType.TRUE_FALSE, None, resolve_tf_answer(answer) or answer
+    return q_type, options, answer
 
 
 def _coerce_status(raw: Any, default: QuestionStatus) -> QuestionStatus:
@@ -89,6 +123,9 @@ class QuestionImporter:
 
         for index, raw in enumerate(raws):
             q_type = coerce_q_type(raw.get("q_type", raw.get("type")))
+            q_type, raw_options, raw_answer = apply_true_false_safety_net(
+                q_type, raw.get("options"), raw.get("answer")
+            )
             status = _coerce_status(raw.get("status"), defaults.status)
 
             try:
@@ -96,8 +133,8 @@ class QuestionImporter:
                     q_type=q_type,
                     status=status,
                     content=raw.get("content"),
-                    options=raw.get("options"),
-                    answer=raw.get("answer"),
+                    options=raw_options,
+                    answer=raw_answer,
                     thinking=raw.get("thinking"),
                     analysis=raw.get("analysis"),
                     summary=raw.get("summary"),

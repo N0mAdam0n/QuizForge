@@ -13,10 +13,12 @@ through the same frontend review -> import pipeline.
 """
 import json
 import re
+
 import uuid
 from collections import defaultdict
 from typing import List, Dict, Optional, Tuple
 
+from app.services.importing.qtype_utils import is_tf_option_pair, resolve_tf_answer
 from app.services.importing.contracts import (
     OUTLINE_HEADING,
     OUTLINE_QUESTION_REF,
@@ -64,7 +66,12 @@ _Q_TYPE_MAP = {
     "解答": "free_response", "解答题": "free_response",
     "简答": "free_response", "简答题": "free_response",
     "主观": "free_response", "主观题": "free_response", "free_response": "free_response",
+    "是非": "true_false", "是非题": "true_false", "对错题": "true_false",
+    "判断对错": "true_false", "对错": "true_false",
 }
+
+# 题型标签中的括号注释/分值,如 "判断题（每题2分）"、"单选题(共10题)"、"判断题 2分"。
+_Q_TYPE_NOISE_RE = re.compile(r"[\(（\[【].*?[\)）\]】]|\d+(?:\.\d+)?\s*分.*$|[:：,，;；\s]+$")
 
 _CN_DIFFICULTY = {"简单": 1, "容易": 1, "较易": 2, "中等": 3, "普通": 3, "较难": 4, "困难": 5, "难": 5}
 
@@ -232,11 +239,26 @@ def _map_q_type(raw: str) -> Optional[str]:
     if not raw:
         return None
     key = raw.splitlines()[0].strip()
-    return _Q_TYPE_MAP.get(key) or _Q_TYPE_MAP.get(key.lower())
+    hit = _Q_TYPE_MAP.get(key) or _Q_TYPE_MAP.get(key.lower())
+    if hit:
+        return hit
+    cleaned = _Q_TYPE_NOISE_RE.sub("", key).strip()
+    cleaned = _Q_TYPE_NOISE_RE.sub("", cleaned).strip()
+    hit = _Q_TYPE_MAP.get(cleaned) or _Q_TYPE_MAP.get(cleaned.lower())
+    if hit:
+        return hit
+    # 前缀匹配:最长键优先,如 "判断题每题两分" → 判断题。
+    low = cleaned.lower()
+    for k in sorted(_Q_TYPE_MAP, key=len, reverse=True):
+        if low.startswith(k.lower()):
+            return _Q_TYPE_MAP[k]
+    return None
 
 
 def _infer_q_type(options: List[str], answer: str, content: str) -> str:
     a = (answer or "").strip()
+    if options and is_tf_option_pair(options):
+        return "true_false"
     if options:
         letters = re.findall(r'[A-Za-z]', a)
         if len(letters) >= 2:
@@ -446,6 +468,16 @@ def _finalize_question(question: dict) -> None:
     answer = question["answer"]
     q_type = question.get("_q_type_explicit") or _infer_q_type(options, answer, content)
 
+    # 判断题写成 "A. 对 / B. 错" 时:记住选项对用于映射字母答案,然后丢弃选项。
+    if q_type == "true_false":
+        if options and is_tf_option_pair(options):
+            question["_tf_options"] = list(options)
+        tf_opts = question.get("_tf_options")
+        if tf_opts is not None:
+            options = []
+        if answer:
+            answer = resolve_tf_answer(answer, tf_opts) or answer
+
     if q_type == "fill_in_the_blank" and answer:
         try:
             parsed_answer = json.loads(answer)
@@ -470,6 +502,7 @@ def _finalize_question(question: dict) -> None:
                     break
 
     question["q_type"] = q_type
+    question["options"] = options
     question["answer"] = answer
     question["warnings"] = warnings
 
@@ -612,6 +645,7 @@ def parse_structured(text: str) -> ExtractionResult:
 
     for question in questions:
         question.pop("_q_type_explicit", None)
+        question.pop("_tf_options", None)
 
     suggested_title = _take_suggested_title(outline)
     return ExtractionResult(
@@ -656,6 +690,7 @@ def parse_numbered(text: str) -> ExtractionResult:
             return
         _finalize_question(current)
         current.pop("_q_type_explicit", None)
+        current.pop("_tf_options", None)
         questions.append(current)
         outline.append(
             {

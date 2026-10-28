@@ -19,7 +19,7 @@ from app.services.question_legacy_adapter import (
     adapt_legacy_question,
 )
 
-from .normalize import coerce_kp_ids, coerce_q_type
+from .normalize import apply_true_false_safety_net, coerce_kp_ids, coerce_q_type
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,9 @@ def extracted_to_v2_review(
     out: list[dict[str, Any]] = []
     for index, raw in enumerate(raws):
         q_type = coerce_q_type(raw.get("q_type", raw.get("type")))
+        q_type, raw_options, raw_answer = apply_true_false_safety_net(
+            q_type, raw.get("options"), raw.get("answer")
+        )
         content = _clean_content(raw.get("content"))
         warnings: list[str] = list(raw.get("warnings") or []) if isinstance(raw.get("warnings"), list) else []
 
@@ -84,8 +87,8 @@ def extracted_to_v2_review(
                 q_type=q_type,
                 status=default_status,
                 content=content,
-                options=raw.get("options"),
-                answer=raw.get("answer"),
+                options=raw_options,
+                answer=raw_answer,
                 thinking=raw.get("thinking"),
                 analysis=raw.get("analysis"),
                 summary=raw.get("summary"),
@@ -96,7 +99,7 @@ def extracted_to_v2_review(
                     q_type=q_type,
                     status=default_status,
                     content=content,
-                    options=raw.get("options"),
+                    options=raw_options,
                     answer=None,
                     thinking=raw.get("thinking"),
                     analysis=raw.get("analysis"),
