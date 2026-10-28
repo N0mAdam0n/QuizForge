@@ -53,3 +53,38 @@ export function seededShuffle<T>(items: readonly T[], seed: number): T[] {
   }
   return out
 }
+
+const PINNED_LAST_PATTERNS = [
+  /^以上(都|全|均)?(对|正确|是|错|不对|错误|都不对|都不是|皆非|皆是)/,
+  /^以上(选项|说法|答案)?(都|全|均)/,
+  /^(都|全)(对|不对|正确|错误)$/,
+  /^(all|none|both|neither) of the (above|options)/i,
+]
+
+/** True for options such as「以上都对」「以上都不对」「All of the above」that must stay last. */
+export function isPinnedLastOption(text: string): boolean {
+  const normalized = text.trim().replace(/^[（(]?[A-Za-z][)）.、．:：]\s*/, '').trim()
+  return PINNED_LAST_PATTERNS.some((re) => re.test(normalized))
+}
+
+export interface ShufflableOption {
+  id: string
+  label: string
+}
+
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+/**
+ * Shuffle choice options for display. Option ids (the keys used for grading and
+ * telemetry) are untouched; only the display order and display letters change.
+ * Options matching「以上都对」etc. keep their relative order at the end.
+ */
+export function shuffleChoiceOptions<T extends ShufflableOption>(
+  options: readonly T[],
+  seed: number,
+  textOf: (option: T) => string,
+): T[] {
+  const pinned = options.filter((o) => isPinnedLastOption(textOf(o)))
+  const free = options.filter((o) => !pinned.includes(o))
+  return [...seededShuffle(free, seed), ...pinned].map((o, i) => ({ ...o, label: LETTERS[i] ?? o.label }))
+}

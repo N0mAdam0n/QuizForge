@@ -13,8 +13,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import RichContent from '@/components/rich-editor/RichContent.vue'
 import type { AnswerSpec, OptionSpec, QuestionType, RichDoc } from '@/types'
-import { collectBlankIds } from '@/components/rich-editor/richDoc'
-import { formatDuration, seededShuffle, summarizeSession } from '~/utils/practiceSession'
+import { collectBlankIds, richDocToPlainText } from '@/components/rich-editor/richDoc'
+import { formatDuration, shuffleChoiceOptions, summarizeSession } from '~/utils/practiceSession'
 
 definePageMeta({ layout: 'default' })
 
@@ -56,7 +56,7 @@ interface PracticeAnswerResult {
 }
 
 const { $api } = useNuxtApp()
-const { preferences, load: loadPreferences } = usePreferences()
+const { preferences, load: loadPreferences, save: savePreferences } = usePreferences()
 const telemetryConsent = useState<boolean>('telemetry-consent', () => false)
 const { currentSubjectId, currentSubject, subjects, init: initSubject } = useSubjectContext()
 
@@ -154,13 +154,30 @@ const explanationVisible = computed(() => {
   return preferences.value.show_explanation_immediately || (id != null && !!revealedExplanations.value[id])
 })
 const questionElapsed = computed(() => formatDuration(nowTick.value - questionShownAt.value))
-const shuffleSeed = ref(1)
-const displayedOptions = computed(() => {
-  const question = currentQuestion.value
+// 打乱选项：仅改变显示顺序与显示字母；判分/遥测仍使用原始选项 id。
+// 同一会话内每题顺序固定（按 题目id + 会话种子 计算），新会话重新打乱。
+const newShuffleSeed = () => Math.floor(Math.random() * 0x7fffffff) + 1
+const shuffleSeed = ref(newShuffleSeed())
+const shuffleOptionsEnabled = computed(() => preferences.value.shuffle_options)
+const toggleShuffleOptions = async (value: boolean) => {
+  try {
+    await savePreferences({ shuffle_options: value })
+  } catch (e) {
+    toast.error('保存“打乱选项”设置失败', { description: e instanceof Error ? e.message : undefined })
+  }
+}
+const optionsFor = (question: PracticeQuestion | null) => {
   if (!question) return []
-  if (!preferences.value.shuffle_options) return question.options
-  return seededShuffle(question.options, question.id * 7919 + shuffleSeed.value)
-})
+  if (!shuffleOptionsEnabled.value || !['single_choice', 'multiple_choice'].includes(question.q_type)) {
+    return question.options
+  }
+  return shuffleChoiceOptions(
+    question.options,
+    (question.id * 7919 + shuffleSeed.value) >>> 0,
+    (option) => richDocToPlainText(option.content),
+  )
+}
+const displayedOptions = computed(() => optionsFor(currentQuestion.value))
 
 const newPracticeSessionId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
@@ -227,6 +244,7 @@ const startPractice = async () => {
   practiceSessionId.value = newPracticeSessionId()
   sessionStartedAt.value = Date.now()
   sessionEndedAt.value = null
+  shuffleSeed.value = newShuffleSeed()
   try {
     const query: Record<string, string | number> = {
       subject_id: practiceSubjectId.value,
@@ -504,7 +522,7 @@ const retryWrongQuestions = () => {
   practiceSessionId.value = newPracticeSessionId()
   sessionStartedAt.value = Date.now()
   sessionEndedAt.value = null
-  shuffleSeed.value += 1
+  shuffleSeed.value = newShuffleSeed()
   resetAnswer(wrong[0])
 }
 
@@ -555,12 +573,14 @@ const submittedAnswerSummary = computed(() => {
   const question = currentQuestion.value
   if (!question) return ''
   const submitted = submittedAnswers.value[question.id]
+  const shown = displayedOptions.value
   if (question.q_type === 'single_choice') {
-    return question.options.find((option) => option.id === submitted)?.label ?? '未记录'
+    return shown.find((option) => option.id === submitted)?.label ?? '未记录'
   }
   if (question.q_type === 'multiple_choice' && Array.isArray(submitted)) {
     return submitted
-      .map((id) => question.options.find((option) => option.id === id)?.label ?? id)
+      .map((id) => shown.find((option) => option.id === id)?.label ?? id)
+      .sort()
       .join('、')
   }
   if (question.q_type === 'true_false' && typeof submitted === 'boolean') {
@@ -722,6 +742,19 @@ if (['20', '40', '60', '80', '100'].includes(String(preferences.value.questions_
           <p v-if="rangeStart < 1 || rangeEnd < rangeStart" class="text-sm text-destructive">结束题号需大于或等于开始题号。</p>
         </div>
 
+        <label for="shuffle-options-start" class="flex max-w-xl cursor-pointer items-center justify-between gap-3">
+          <span class="space-y-1">
+            <span class="block text-sm font-medium">打乱选项</span>
+            <span class="block text-xs text-muted-foreground">开启后选择题选项随机排序（“以上都对”等保持在最后）</span>
+          </span>
+          <Switch
+            id="shuffle-options-start"
+            :model-value="shuffleOptionsEnabled"
+            aria-label="打乱选项"
+            @update:model-value="toggleShuffleOptions"
+          />
+        </label>
+
         <div class="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <Badge variant="secondary">{{ modeLabels[mode] }}</Badge>
           <Button :disabled="loading || !currentSubjectId || !selectedBankId || (mode === 'range' && (rangeStart < 1 || rangeEnd < rangeStart))" @click="startPractice">
@@ -861,7 +894,7 @@ if (['20', '40', '60', '80', '100'].includes(String(preferences.value.questions_
                   </Button>
                   <div v-else class="mt-3 space-y-2">
                     <div class="font-medium">参考答案</div>
-                    <AnswerDisplay :answer="answerResult.correct_answer" :options="currentQuestion.options" />
+                    <AnswerDisplay :answer="answerResult.correct_answer" :options="displayedOptions" />
                     <div v-if="answerResult.analysis" class="border-t pt-2">
                       <div class="mb-1 font-medium">解析</div>
                       <RichContent :content="answerResult.analysis" />
@@ -954,6 +987,18 @@ if (['20', '40', '60', '80', '100'].includes(String(preferences.value.questions_
                     @update:model-value="autoAdvanceCorrect = $event"
                   />
                 </label>
+                <label for="shuffle-options" class="flex cursor-pointer items-center justify-between gap-3">
+                  <span class="space-y-1">
+                    <span class="block text-sm font-medium">打乱选项</span>
+                    <span class="block text-xs text-muted-foreground">选择题选项随机排序，判断题不打乱</span>
+                  </span>
+                  <Switch
+                    id="shuffle-options"
+                    :model-value="shuffleOptionsEnabled"
+                    aria-label="打乱选项"
+                    @update:model-value="toggleShuffleOptions"
+                  />
+                </label>
               </CardContent>
             </Card>
           </aside>
@@ -991,6 +1036,15 @@ if (['20', '40', '60', '80', '100'].includes(String(preferences.value.questions_
                 :model-value="autoAdvanceCorrect"
                 aria-label="答对后自动下一题"
                 @update:model-value="autoAdvanceCorrect = $event"
+              />
+            </label>
+            <label for="shuffle-options-mobile" class="flex cursor-pointer items-center justify-between gap-3 border-t pt-3">
+              <span class="block text-sm font-medium">打乱选项</span>
+              <Switch
+                id="shuffle-options-mobile"
+                :model-value="shuffleOptionsEnabled"
+                aria-label="打乱选项"
+                @update:model-value="toggleShuffleOptions"
               />
             </label>
           </div>
