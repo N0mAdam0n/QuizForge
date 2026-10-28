@@ -678,7 +678,7 @@ if (['20', '40', '60', '80', '100'].includes(String(preferences.value.questions_
           <Button
             v-for="option in ([
               { value: 'sequential', label: '顺序刷题', icon: ArrowRight, description: '按题目顺序练习' },
-              { value: 'random', label: '乱序刷题', icon: Shuffle, description: '随机抽取指定数量或整库练习' },
+              { value: 'random', label: '乱序刷题', icon: Shuffle, description: '打乱题目顺序，随机抽取指定数量或整库练习' },
               { value: 'type', label: '按题型刷题', icon: CircleHelp, description: '选择题型集中练习' },
               { value: 'wrong', label: '错题练习', icon: RotateCcw, description: '重练自己答错过的题目' },
               { value: 'range', label: '区间刷题', icon: ArrowRight, description: '按题库顺序练习指定题号范围' },
@@ -745,7 +745,7 @@ if (['20', '40', '60', '80', '100'].includes(String(preferences.value.questions_
         <label for="shuffle-options-start" class="flex max-w-xl cursor-pointer items-center justify-between gap-3">
           <span class="space-y-1">
             <span class="block text-sm font-medium">打乱选项</span>
-            <span class="block text-xs text-muted-foreground">开启后选择题选项随机排序（“以上都对”等保持在最后）</span>
+            <span class="block text-xs text-muted-foreground">适用于所有练习方式：选择题选项随机排序（“以上都对”等保持在最后）。题目顺序乱序请选择“乱序刷题”。</span>
           </span>
           <Switch
             id="shuffle-options-start"
@@ -987,18 +987,6 @@ if (['20', '40', '60', '80', '100'].includes(String(preferences.value.questions_
                     @update:model-value="autoAdvanceCorrect = $event"
                   />
                 </label>
-                <label for="shuffle-options" class="flex cursor-pointer items-center justify-between gap-3">
-                  <span class="space-y-1">
-                    <span class="block text-sm font-medium">打乱选项</span>
-                    <span class="block text-xs text-muted-foreground">选择题选项随机排序，判断题不打乱</span>
-                  </span>
-                  <Switch
-                    id="shuffle-options"
-                    :model-value="shuffleOptionsEnabled"
-                    aria-label="打乱选项"
-                    @update:model-value="toggleShuffleOptions"
-                  />
-                </label>
               </CardContent>
             </Card>
           </aside>
@@ -1036,15 +1024,6 @@ if (['20', '40', '60', '80', '100'].includes(String(preferences.value.questions_
                 :model-value="autoAdvanceCorrect"
                 aria-label="答对后自动下一题"
                 @update:model-value="autoAdvanceCorrect = $event"
-              />
-            </label>
-            <label for="shuffle-options-mobile" class="flex cursor-pointer items-center justify-between gap-3 border-t pt-3">
-              <span class="block text-sm font-medium">打乱选项</span>
-              <Switch
-                id="shuffle-options-mobile"
-                :model-value="shuffleOptionsEnabled"
-                aria-label="打乱选项"
-                @update:model-value="toggleShuffleOptions"
               />
             </label>
           </div>

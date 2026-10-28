@@ -560,7 +560,7 @@ async def read_practice_questions(
     import_task_id: int,
     mode: PracticeMode = "sequential",
     q_type: QuestionType | None = None,
-    limit: int = Query(default=20, ge=1, le=50),
+    limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     random_count: str = "20",
     start_number: int | None = Query(default=None, ge=1),
@@ -660,7 +660,7 @@ async def read_practice_questions(
             safe = _safe_question(row)
             if safe is not None:
                 questions.append(safe)
-            if len(questions) > requested_count:
+            if len(questions) >= requested_count:
                 break
     else:
         query_offset = offset + range_offset
